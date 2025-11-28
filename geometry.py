@@ -35,7 +35,43 @@ def intersectSphere(sphere: Sphere, ray: Ray, t_min: float, t_max: float) -> Int
     hit = Intersection() # default is no intersection (is_hit = False)
 
     # TODO: Objective 2: Implement ray-sphere intersection
+    O_local = sphere.M_inv @ tm.vec4(ray.origin, 1.0)
+    D_local = sphere.M_inv @ tm.vec4(ray.direction, 0.0)
+    D_local_norm = tm.normalize(D_local.xyz)
+    center = tm.vec3(0.0)
+    radius = sphere.radius
+    a = tm.dot(D_local_norm, D_local_norm)
+    b = 2 * tm.dot(D_local_norm, O_local.xyz)
+    c = tm.dot(O_local.xyz, O_local.xyz) - radius * radius
+    discriminant = b * b - 4.0 * a * c
+    if discriminant >= 0.0:
+        t1 = (-b - tm.sqrt(discriminant)) / (2.0 * a)
+        t2 = (-b + tm.sqrt(discriminant)) / (2.0 * a)
+        t = t_max
+        if t1 > t_min and t1 < t_max:
+            t = t1
+            hit.is_hit = True
+        if t2 > t_min and t2 < t_max and t2 < t:
+            t = t2
+            hit.is_hit = True
+        
+        if hit.is_hit:
+            hit.t = t
 
+            # Compute Local Point & Normal
+            P_local = O_local.xyz + t * D_local_norm
+            N_local = tm.normalize(P_local - center) # Normal at the surface
+            
+            # 1. Transform Point to World Space (using M)
+            P_world_h = sphere.M @ tm.vec4(P_local, 1.0)
+            hit.position = P_world_h.xyz
+
+            # 2. Transform Normal to World Space (using Inverse Transpose of M)
+            M_inv_T = sphere.M_inv.transpose()
+            N_world_h = M_inv_T @ tm.vec4(N_local, 0.0)
+            hit.normal = tm.normalize(N_world_h.xyz)
+            
+            hit.mat = sphere.material
 
     return hit
 
