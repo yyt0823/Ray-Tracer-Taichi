@@ -268,10 +268,74 @@ def intersectMesh(mesh: Mesh,                  # data for this mesh (start face 
                   t_min: float,
                   t_max: float
 ) -> Intersection:
-    
-    out_intersect = Intersection() # default is no intersection (is_hit = False)
+    out_intersect = Intersection()  # default is no intersection (is_hit = False)
 
-    # TODO: Objective 8: Implement ray-mesh intersection
+    # Transform ray into mesh's local frame (Objective 4)
+    local_ray = changeRayFrame(ray, mesh.M_inv)
+    O_local = local_ray.origin
+    D_local = local_ray.direction
 
+    best_t = t_max
+    best_P_local = tm.vec3(0.0)
+    best_N_local = tm.vec3(0.0)
+    hit_any = False
+
+    # Loop over all faces belonging to this mesh
+    start = mesh.faces_ids_start
+    count = mesh.faces_ids_count
+
+    for fi in range(count):
+        face_index = start + fi
+        # Indices of the triangle vertices in the global vertex array
+        f = meshes_faces[face_index]
+        i0 = f[0]
+        i1 = f[1]
+        i2 = f[2]
+
+        v0 = meshes_verts[i0]
+        v1 = meshes_verts[i1]
+        v2 = meshes_verts[i2]
+
+        # Möller–Trumbore ray–triangle intersection in local space
+        e1 = v1 - v0
+        e2 = v2 - v0
+
+        pvec = tm.cross(D_local, e2)
+        det = tm.dot(e1, pvec)
+
+        if ti.abs(det) > EPSILON:
+            inv_det = 1.0 / det
+
+            tvec = O_local - v0
+            u = tm.dot(tvec, pvec) * inv_det
+            if u < 0.0 or u > 1.0:
+                continue
+
+            qvec = tm.cross(tvec, e1)
+            v = tm.dot(D_local, qvec) * inv_det
+            if v < 0.0 or u + v > 1.0:
+                continue
+
+            t = tm.dot(e2, qvec) * inv_det
+
+            if t >= t_min and t <= best_t:
+                best_t = t
+                hit_any = True
+
+                best_P_local = O_local + t * D_local
+                best_N_local = tm.normalize(tm.cross(e1, e2))
+
+    if hit_any:
+        out_intersect.is_hit = True
+        out_intersect.t = best_t
+        out_intersect.mat = mesh.material
+
+        # Transform intersection point and normal back to world space
+        P_world_h = mesh.M @ tm.vec4(best_P_local, 1.0)
+        out_intersect.position = P_world_h.xyz
+
+        M_inv_T = mesh.M_inv.transpose()
+        N_world_h = M_inv_T @ tm.vec4(best_N_local, 0.0)
+        out_intersect.normal = tm.normalize(N_world_h.xyz)
 
     return out_intersect
