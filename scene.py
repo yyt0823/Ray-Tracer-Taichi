@@ -100,57 +100,82 @@ class Scene:
         for l in range(self.nb_lights):
             current_light = self.lights[l]
 
-            # light vector (direction)
-            L_vec = current_light.vector - intersect.position
-            light_distance = tm.length(L_vec)
-            
-            # normalized light vector
-            L_norm = L_vec / light_distance 
-            N_norm = intersect.normal 
+            # Initialize variables
+            L_norm = tm.vec3(0.0)
+            t_max_shadow = float('inf') # Default for directional light
+            light_distance = 0.0
+            attenuation_factor = 1.0     # Default: No attenuation (e.g., Directional Light)
 
-            N_dot_L = tm.max(0.0, tm.dot(N_norm, L_norm)) 
+            # --- 1. Determine Light Vector (L), Distance, and Attenuation ---
             
-            shadow_attenuation = 1.0
-            # if facing the light
-            if N_dot_L > 0.0: 
+            if current_light.ltype == 1: # Point Light
+                # L_vec: Vector from hit point TO light source position
+                L_vec = current_light.vector - intersect.position
+                light_distance = tm.length(L_vec)
                 
-                # Shadow Ray setup
-                shadow_ray = Ray(intersect.position, L_norm)
+                # Normalized light vector
+                L_norm = L_vec / light_distance 
+                
+                # Shadow ray stops just before the light source
                 t_max_shadow = light_distance - shadow_epsilon
                 
-                # cast a ray from the intersection point to the light source and check if it hits an object
+                # Calculate Attenuation Factor
+                # Attenuation = 1 / (C + L*d + Q*d^2)
+                # coeffs: [quadratic (x), linear (y), constant (z)]
+                
+                C = current_light.attenuation.z
+                L = current_light.attenuation.y
+                Q = current_light.attenuation.x
+                d = light_distance
+                
+                denominator = C + L * d + Q * d * d
+                
+                # Avoid division by zero, although typically C > 0
+                if denominator > 0.0:
+                    attenuation_factor = 1.0 / denominator
+            
+            elif current_light.ltype == 0: # Directional Light
+                # L_norm: Already stored as the normalized direction TOWARDS the light
+                L_norm = current_light.vector 
+                # t_max_shadow remains float('inf'), attenuation_factor remains 1.0
+
+                
+            N_norm = intersect.normal 
+
+            # Calculate N dot L and clamp it to 0
+            N_dot_L = tm.max(0.0, tm.dot(N_norm, L_norm)) 
+            
+            # --- 2. Shadow Check (Objective 6) ---
+            shadow_attenuation = 1.0
+            
+            if N_dot_L > 0.0: 
+                
+                shadow_ray = Ray(intersect.position, L_norm)
                 shadow_hit = self.intersect_scene(shadow_ray, shadow_epsilon, t_max_shadow) 
                 
                 if shadow_hit.is_hit:
                     shadow_attenuation = 0.0
             
+            # --- 3. Shading (Diffuse & Specular - Objective 3) ---
+            
             # Only proceed if the point is not in shadow
             if shadow_attenuation > 0.0:
                 
-                # diffuse term
-                diffuse_term = current_light.colour * intersect.mat.diffuse * N_dot_L
+                # Apply N_dot_L, light color, material color, AND attenuation
+                
+                # Diffuse term
+                diffuse_term = current_light.colour * intersect.mat.diffuse * N_dot_L * attenuation_factor
 
-                # specular term
+                # Specular term (Blinn-Phong)
                 V_norm = -ray.direction 
-                
-                # H_norm: Halfway Vector (H) = normalize(L + V)
                 H_norm = tm.normalize(L_norm + V_norm)
-                
-                # Specular factor: max(0, N dot H)^shininess
                 N_dot_H = tm.max(0.0, tm.dot(N_norm, H_norm))
-                
                 specular_factor = tm.pow(N_dot_H, intersect.mat.shininess)
                 
-                # Specular term: LightColor * SpecularColor * SpecularFactor
-                specular_term = current_light.colour * intersect.mat.specular * specular_factor
+                # Specular term: apply light color, specular color, factor, AND attenuation
+                specular_term = current_light.colour * intersect.mat.specular * specular_factor * attenuation_factor
 
-                # --- 5. Accumulation ---
+                # Accumulation
                 sample_colour += diffuse_term + specular_term
-            
-            
-            
-            # TODO: Objective 6: Implement shadow rays
-
-            continue
 
         return sample_colour

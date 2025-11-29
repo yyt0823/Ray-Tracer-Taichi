@@ -34,10 +34,9 @@ def intersectSphere(sphere: Sphere, ray: Ray, t_min: float, t_max: float) -> Int
 
     hit = Intersection() # default is no intersection (is_hit = False)
 
-    # TODO: Objective 2: Implement ray-sphere intersection
-    O_local = sphere.M_inv @ tm.vec4(ray.origin, 1.0)
-    D_local = sphere.M_inv @ tm.vec4(ray.direction, 0.0)
-    D_local_norm = tm.normalize(D_local.xyz)
+    local_ray = changeRayFrame(ray, sphere.M_inv)
+    O_local = local_ray.origin
+    D_local_norm = tm.normalize(local_ray.direction)
     center = tm.vec3(0.0)
     radius = sphere.radius
     a = tm.dot(D_local_norm, D_local_norm)
@@ -107,10 +106,52 @@ def intersectPlane(plane: Plane, ray: Ray, t_min: float, t_max: float) -> Inters
         are applied in a checkerboard pattern in the plane's local XZ plane.
     '''
 
-    hit = Intersection() # default is no intersection (is_hit = False)
+    hit = Intersection()  # default is no intersection (is_hit = False)
 
-    # TODO: Objective 5: Implement ray-plane intersection
+    # Use Objective 4 helper to transform ray into plane's local frame
+    local_ray = changeRayFrame(ray, plane.M_inv)
+    O_local = local_ray.origin
+    D_local_norm = tm.normalize(local_ray.direction)
 
+    # Plane normal in local space
+    N_local = plane.normal
+
+    # Ray-plane intersection in local space: N · (O + t D) = 0
+    N_dot_D = tm.dot(N_local, D_local_norm)
+
+    # Only do intersection work if not parallel
+    if ti.abs(N_dot_D) >= EPSILON:
+        # t = - (N · O) / (N · D)
+        t = -tm.dot(N_local, O_local) / N_dot_D
+
+        # Check valid t range
+        if t >= t_min and t <= t_max:
+            hit.is_hit = True
+            hit.t = t
+
+            # Local intersection point
+            P_local = O_local + t * D_local_norm
+
+            # Choose material (checkerboard in local XZ if two_materials)
+            if plane.two_materials:
+                x_int = ti.floor(P_local.x)
+                z_int = ti.floor(P_local.z)
+                x_parity = ti.cast(x_int, ti.i32) % 2
+                z_parity = ti.cast(z_int, ti.i32) % 2
+                if (x_parity + z_parity) % 2 == 0:
+                    hit.mat = plane.material1
+                else:
+                    hit.mat = plane.material2
+            else:
+                hit.mat = plane.material1
+
+            # Transform intersection data back to world space
+            P_world_h = plane.M @ tm.vec4(P_local, 1.0)
+            hit.position = P_world_h.xyz
+
+            M_inv_T = plane.M_inv.transpose()
+            N_world_h = M_inv_T @ tm.vec4(N_local, 0.0)
+            hit.normal = tm.normalize(N_world_h.xyz)
 
     return hit
 
@@ -126,10 +167,86 @@ class AABox:
 
 @ti.func
 def intersectAABox(aabox: AABox, ray: Ray, t_min: float, t_max: float) -> Intersection:
-    hit = Intersection() # default is no intersection (is_hit = False)
+    hit = Intersection()  # default is no intersection (is_hit = False)
 
-    # TODO: Objective 7: Implement ray-box intersection
+    # Use Objective 4 helper to transform ray into the box's local frame
+    # (where the AABox is axis-aligned between minpos and maxpos)
+    local_ray = changeRayFrame(ray, aabox.M_inv)
+    O_local = local_ray.origin
+    D_local = local_ray.direction
 
+    # Slab method for axis-aligned box intersection in local space
+    t_enter = t_min
+    t_exit = t_max
+    hit_axis = -1  # 0=x,1=y,2=z to determine normal later
+
+    for axis in ti.static(range(3)):
+        origin_comp = O_local[axis]
+        dir_comp = D_local[axis]
+        min_comp = aabox.minpos[axis]
+        max_comp = aabox.maxpos[axis]
+
+        if ti.abs(dir_comp) < EPSILON:
+            # Ray is parallel to slabs; must be within the slab range to possibly hit
+            if origin_comp < min_comp or origin_comp > max_comp:
+                # No intersection with this slab -> no hit at all
+                t_enter = t_max + 1.0  # force miss
+        else:
+            inv_dir = 1.0 / dir_comp
+            t0 = (min_comp - origin_comp) * inv_dir
+            t1 = (max_comp - origin_comp) * inv_dir
+            # Ensure t0 <= t1
+            if t0 > t1:
+                tmp = t0
+                t0 = t1
+                t1 = tmp
+
+            # Update global enter and exit
+            if t0 > t_enter:
+                t_enter = t0
+                hit_axis = axis
+            if t1 < t_exit:
+                t_exit = t1
+
+    # Valid intersection if interval is non-empty and within [t_min, t_max]
+    if t_enter <= t_exit and t_enter >= t_min and t_enter <= t_max:
+        hit.is_hit = True
+        hit.t = t_enter
+
+        # Local hit point
+        P_local = O_local + t_enter * D_local
+
+        # Local normal based on which face we entered
+        N_local = tm.vec3(0.0, 0.0, 0.0)
+        if hit_axis == 0:
+            # x-face
+            if P_local.x <= (aabox.minpos.x + aabox.maxpos.x) * 0.5:
+                N_local.x = -1.0
+            else:
+                N_local.x = 1.0
+        elif hit_axis == 1:
+            # y-face
+            if P_local.y <= (aabox.minpos.y + aabox.maxpos.y) * 0.5:
+                N_local.y = -1.0
+            else:
+                N_local.y = 1.0
+        elif hit_axis == 2:
+            # z-face
+            if P_local.z <= (aabox.minpos.z + aabox.maxpos.z) * 0.5:
+                N_local.z = -1.0
+            else:
+                N_local.z = 1.0
+
+        # Assign material in local space
+        hit.mat = aabox.material
+
+        # Transform intersection point and normal back to world space
+        P_world_h = aabox.M @ tm.vec4(P_local, 1.0)
+        hit.position = P_world_h.xyz
+
+        M_inv_T = aabox.M_inv.transpose()
+        N_world_h = M_inv_T @ tm.vec4(N_local, 0.0)
+        hit.normal = tm.normalize(N_world_h.xyz)
 
     return hit
 
