@@ -17,9 +17,11 @@ def getRayPoint(ray: Ray, t: float) -> tm.vec3:
 @ti.func
 def changeRayFrame(ray: Ray, M: tm.mat4) -> Ray:
     # TODO: Objective 4: Ray and Geometry Transformations
+    O_local = (M @ tm.vec4(ray.origin, 1.0)).xyz
+    D_local = tm.normalize((M @ tm.vec4(ray.direction, 0.0)).xyz)
+    return Ray(O_local, D_local)
 
 
-    return ray # change this placeholder to return a transformed ray
 
 @ti.dataclass
 class Material:
@@ -49,6 +51,14 @@ class Intersection:
 def changeIntersectFrame(intersect: Intersection, M: tm.mat4, M_inv: tm.mat4) -> Intersection:
 
     # TODO: Objective 4: Ray and Geometry Transformations
+    if not intersect.is_hit:
+        return intersect
+    
+    new_intersect = intersect
+    new_intersect.position = M @ tm.vec4(intersect.position, 1.0).xyz
+    
+    M_inv_T = M_inv.transpose()
+    new_intersect.normal = tm.normalize(M_inv_T @ tm.vec4(intersect.normal, 0.0).xyz)
 
 
     return intersect # change this placeholder to return a transformed intersection

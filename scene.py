@@ -98,8 +98,56 @@ class Scene:
 
         ti.loop_config(serialize=True) 
         for l in range(self.nb_lights):
+            current_light = self.lights[l]
+
+            # light vector (direction)
+            L_vec = current_light.vector - intersect.position
+            light_distance = tm.length(L_vec)
             
-            # TODO: Objective 3: Implement diffuse and specular shading
+            # normalized light vector
+            L_norm = L_vec / light_distance 
+            N_norm = intersect.normal 
+
+            N_dot_L = tm.max(0.0, tm.dot(N_norm, L_norm)) 
+            
+            shadow_attenuation = 1.0
+            # if facing the light
+            if N_dot_L > 0.0: 
+                
+                # Shadow Ray setup
+                shadow_ray = Ray(intersect.position, L_norm)
+                t_max_shadow = light_distance - shadow_epsilon
+                
+                # cast a ray from the intersection point to the light source and check if it hits an object
+                shadow_hit = self.intersect_scene(shadow_ray, shadow_epsilon, t_max_shadow) 
+                
+                if shadow_hit.is_hit:
+                    shadow_attenuation = 0.0
+            
+            # Only proceed if the point is not in shadow
+            if shadow_attenuation > 0.0:
+                
+                # diffuse term
+                diffuse_term = current_light.colour * intersect.mat.diffuse * N_dot_L
+
+                # specular term
+                V_norm = -ray.direction 
+                
+                # H_norm: Halfway Vector (H) = normalize(L + V)
+                H_norm = tm.normalize(L_norm + V_norm)
+                
+                # Specular factor: max(0, N dot H)^shininess
+                N_dot_H = tm.max(0.0, tm.dot(N_norm, H_norm))
+                
+                specular_factor = tm.pow(N_dot_H, intersect.mat.shininess)
+                
+                # Specular term: LightColor * SpecularColor * SpecularFactor
+                specular_term = current_light.colour * intersect.mat.specular * specular_factor
+
+                # --- 5. Accumulation ---
+                sample_colour += diffuse_term + specular_term
+            
+            
             
             # TODO: Objective 6: Implement shadow rays
 
