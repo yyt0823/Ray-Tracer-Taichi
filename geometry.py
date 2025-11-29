@@ -5,6 +5,30 @@ import taichi.math as tm
 
 EPSILON = 10 ** (-5)
 
+@ti.func
+def rayPlaneIntersection(ray_origin: tm.vec3, ray_dir: tm.vec3, plane_point: tm.vec3, plane_normal: tm.vec3) -> float:
+    ''' Compute ray-plane intersection t value
+    Args:
+        ray_origin (tm.vec3): ray origin point
+        ray_dir (tm.vec3): ray direction vector
+        plane_point (tm.vec3): a point on the plane
+        plane_normal (tm.vec3): normalized plane normal vector
+    Returns:
+        float: t value where ray intersects plane, or float('inf') if no intersection
+    '''
+    N_dot_D = tm.dot(plane_normal, ray_dir)
+    
+    # Check if ray is parallel to plane
+    if ti.abs(N_dot_D) < EPSILON:
+        return float('inf')
+    
+    # Ray-plane intersection: t = -N · (O - P) / (N · D)
+    # where P is a point on the plane, O is ray origin, D is ray direction
+    tvec = ray_origin - plane_point
+    t = -tm.dot(plane_normal, tvec) / N_dot_D
+    
+    return t
+
 @ti.dataclass
 class Sphere:
     id: int
@@ -111,7 +135,7 @@ def intersectPlane(plane: Plane, ray: Ray, t_min: float, t_max: float) -> Inters
     # Use Objective 4 helper to transform ray into plane's local frame
     local_ray = changeRayFrame(ray, plane.M_inv)
     O_local = local_ray.origin
-    D_local_norm = tm.normalize(local_ray.direction)
+    D_local_norm = local_ray.direction
 
     # Plane normal in local space
     N_local = plane.normal
@@ -136,8 +160,8 @@ def intersectPlane(plane: Plane, ray: Ray, t_min: float, t_max: float) -> Inters
             if plane.two_materials:
                 x_int = ti.floor(P_local.x)
                 z_int = ti.floor(P_local.z)
-                x_parity = ti.cast(x_int, ti.i32) % 2
-                z_parity = ti.cast(z_int, ti.i32) % 2
+                x_parity = x_int % 2
+                z_parity = z_int % 2
                 if (x_parity + z_parity) % 2 == 0:
                     hit.mat = plane.material1
                 else:
@@ -169,8 +193,6 @@ class AABox:
 def intersectAABox(aabox: AABox, ray: Ray, t_min: float, t_max: float) -> Intersection:
     hit = Intersection()  # default is no intersection (is_hit = False)
 
-    # Use Objective 4 helper to transform ray into the box's local frame
-    # (where the AABox is axis-aligned between minpos and maxpos)
     local_ray = changeRayFrame(ray, aabox.M_inv)
     O_local = local_ray.origin
     D_local = local_ray.direction
@@ -180,8 +202,11 @@ def intersectAABox(aabox: AABox, ray: Ray, t_min: float, t_max: float) -> Inters
     t_exit = t_max
     hit_axis = -1  # 0=x,1=y,2=z to determine normal later
 
+    # this is essentially calculation in 1 dimension for each axis
     for axis in ti.static(range(3)):
+        # ray origin on that axis
         origin_comp = O_local[axis]
+        # distance move on that axis each step
         dir_comp = D_local[axis]
         min_comp = aabox.minpos[axis]
         max_comp = aabox.maxpos[axis]
@@ -296,34 +321,74 @@ def intersectMesh(mesh: Mesh,                  # data for this mesh (start face 
         v1 = meshes_verts[i1]
         v2 = meshes_verts[i2]
 
-        # Möller–Trumbore ray–triangle intersection in local space
+        # Step 1: Compute triangle normal and edges
         e1 = v1 - v0
         e2 = v2 - v0
-
-        pvec = tm.cross(D_local, e2)
-        det = tm.dot(e1, pvec)
-
-        if ti.abs(det) > EPSILON:
-            inv_det = 1.0 / det
-
-            tvec = O_local - v0
-            u = tm.dot(tvec, pvec) * inv_det
-            if u < 0.0 or u > 1.0:
-                continue
-
-            qvec = tm.cross(tvec, e1)
-            v = tm.dot(D_local, qvec) * inv_det
-            if v < 0.0 or u + v > 1.0:
-                continue
-
-            t = tm.dot(e2, qvec) * inv_det
-
-            if t >= t_min and t <= best_t:
-                best_t = t
-                hit_any = True
-
-                best_P_local = O_local + t * D_local
-                best_N_local = tm.normalize(tm.cross(e1, e2))
+        N_tri = tm.cross(e1, e2)
+        N_normalized = tm.normalize(N_tri)
+        
+        # Step 2: Ray-plane intersection (same as plane intersection)
+        N_dot_D = tm.dot(N_normalized, D_local)
+        
+        # Skip if ray is parallel to plane
+        if ti.abs(N_dot_D) < EPSILON:
+            continue
+        
+        # N · (R(t) - v0) = 0
+        # N · (O_local + t*D_local - v0) = 0
+        # Solve: t = -N · (O_local - v0) / (N · D_local)
+        tvec = O_local - v0
+        t = -tm.dot(N_normalized, tvec) / N_dot_D
+        
+        # Check if intersection is within valid t range
+        if t < t_min or t > best_t:
+            continue
+        
+        # Step 3: Compute intersection point
+        P = O_local + t * D_local
+        
+        # Step 4: Use signed areas to check if P is inside triangle
+        # Area of full triangle (v0, v1, v2)
+        area_full_vec = tm.cross(e1, e2)
+        area_full = tm.dot(area_full_vec, N_normalized)  # Project onto normal for signed area
+        
+        if ti.abs(area_full) < EPSILON:
+            continue
+        
+        # Compute signed areas of three sub-triangles formed by point P
+        # Area of triangle (P, v1, v2) - corresponds to barycentric coordinate for v0
+        edge1 = v1 - P
+        edge2 = v2 - P
+        area1_vec = tm.cross(edge1, edge2)
+        area1 = tm.dot(area1_vec, N_normalized)
+        
+        # Area of triangle (P, v2, v0) - corresponds to barycentric coordinate for v1
+        edge3 = v2 - P
+        edge4 = v0 - P
+        area2_vec = tm.cross(edge3, edge4)
+        area2 = tm.dot(area2_vec, N_normalized)
+        
+        # Area of triangle (P, v0, v1) - corresponds to barycentric coordinate for v2
+        edge5 = v0 - P
+        edge6 = v1 - P
+        area3_vec = tm.cross(edge5, edge6)
+        area3 = tm.dot(area3_vec, N_normalized)
+        
+        # Compute barycentric coordinates (normalized by full area)
+        inv_area_full = 1.0 / area_full
+        u = area1 * inv_area_full  # Weight for v0
+        v = area2 * inv_area_full  # Weight for v1
+        w = area3 * inv_area_full  # Weight for v2
+        
+        # Check if point is inside triangle: all barycentrics must be >= 0
+        if u < 0.0 or v < 0.0 or w < 0.0:
+            continue
+        
+        # Valid intersection found!
+        best_t = t
+        hit_any = True
+        best_P_local = P
+        best_N_local = N_normalized
 
     if hit_any:
         out_intersect.is_hit = True
