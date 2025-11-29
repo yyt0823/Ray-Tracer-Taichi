@@ -291,8 +291,8 @@ def intersectMesh(mesh: Mesh,                  # data for this mesh (start face 
                   meshes_faces: ti.template(), # all faces (for all meshes)
                   ray: Ray,
                   t_min: float,
-                  t_max: float
-) -> Intersection:
+                  t_max: float) -> Intersection:
+
     out_intersect = Intersection()  # default is no intersection (is_hit = False)
 
     # Transform ray into mesh's local frame (Objective 4)
@@ -404,3 +404,7 @@ def intersectMesh(mesh: Mesh,                  # data for this mesh (start face 
         out_intersect.normal = tm.normalize(N_world_h.xyz)
 
     return out_intersect
+
+
+
+
