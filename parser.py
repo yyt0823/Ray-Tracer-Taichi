@@ -92,7 +92,8 @@ def load_scene(infile: str, image_scale_factor: float = 1.0) -> scene.Scene:
     objects = {"sphere": [],
                "plane": [],
                "box": [],
-               "mesh": []}  # lists of loaded object geometries and hierarchy roots
+               "mesh": [],
+               "cone": []}  # lists of loaded object geometries and hierarchy roots
     node_by_name = {}  # dictionary of geometries by name (for instances)
 
     M_parent = tm.mat4(np.eye(4))  # identity matrix as the initial parent transformation
@@ -138,13 +139,20 @@ def load_scene(infile: str, image_scale_factor: float = 1.0) -> scene.Scene:
     for i in range(len(objects["mesh"])):
         meshes[i] = objects["mesh"][i]
 
+    nb_cones = len(objects["cone"])
+    cones = geom.Cone.field(shape=max(1, nb_cones))
+    for i in range(len(objects["cone"])):
+        cones[i] = objects["cone"][i]
+
     return scene.Scene( jitter, samples,  # General settings
                 camera,  # Camera settings
                 ambient, lights, nb_lights,  # Light settings
                 spheres, nb_spheres,
                 planes, nb_planes,
                 boxes, nb_boxes,
-                meshes, nb_meshes, scene_meshes_verts, scene_meshes_faces)  # Geometry settings
+                meshes, nb_meshes,
+                cones, nb_cones,
+                scene_meshes_verts, scene_meshes_faces)  # Geometry settings
 
 def mat4_glm_to_ti( M_glm: glm.mat4 ) -> tm.mat4:
     return tm.mat4( glm.transpose(M_glm).to_list() )
@@ -212,6 +220,11 @@ def load_geometry(geometry, material_by_name, M_parent: tm.mat4 ):
         meshes_total_nb_verts += len(verts)
         meshes_total_nb_faces += len(faces)
         return mesh
+    elif g_type == "cone":
+        g_radius = geometry.get("radius", 1.0)
+        g_height = geometry.get("height", 2.0)
+        M, M_inv = load_geometry_transformation_matrix(geometry, M_parent)
+        return geom.Cone(geom_id, g_materials[0], g_radius, g_height, M, M_inv)
     else:
         print("Unkown object type", g_type, ", skipping initialization")
         geom_id -= 1  # we cancel the increment of geom_id since we didn't create any geometry
@@ -253,6 +266,8 @@ def load_instance(geometry, node_by_name):
                 new_obj = geom.AABox(obj.id, obj.material, obj.minpos, obj.maxpos, M @ obj.M, obj.M_inv @ M_inv )  
             elif obj_type == "mesh":
                 new_obj = geom.Mesh(obj.id, obj.material, obj.vert_start, obj.nb_verts, obj.face_start, obj.nb_faces,  M @ obj.M, obj.M_inv @ M_inv )                          
+            elif obj_type == "cone":
+                new_obj = geom.Cone(obj.id, obj.material, obj.radius, obj.height, M @ obj.M, obj.M_inv @ M_inv)
             objects.append((obj_type, new_obj))
 
     return objects

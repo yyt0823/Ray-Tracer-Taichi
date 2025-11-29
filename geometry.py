@@ -406,5 +406,99 @@ def intersectMesh(mesh: Mesh,                  # data for this mesh (start face 
     return out_intersect
 
 
+"""
+objective 9 Geometry: Cone
 
+implicit form : f(x, y, z) = x² + z² - (r²/h²) * y² = 0
+
+we will make k_sq = r²/h² to simplify the equation later
+
+
+
+"""
+@ti.dataclass
+class Cone:
+    id: int
+    material: Material
+    radius: float      # radius at the base
+    height: float      # height of the cone
+    M: tm.mat4
+    M_inv: tm.mat4
+
+@ti.func
+def intersectCone(cone: Cone, ray: Ray, t_min: float, t_max: float) -> Intersection:
+    ''' Ray-cone intersection
+    Args:
+        cone (Cone): cone to intersect with
+        ray (Ray): ray in world space
+        t_min (float): minimum t value for valid intersection
+        t_max (float): maximum t value for valid intersection
+    Returns:
+        Intersection: intersection data (is_hit, t, normal, point, material)
+        The cone equation in local space: x² + z² - (r²/h²) * y² = 0
+        where r is the radius at height h, apex is at origin, extending along +Y axis.
+    '''
+    
+    hit = Intersection()  # default is no intersection (is_hit = False)
+    
+    # Transform ray into cone's local frame
+    local_ray = changeRayFrame(ray, cone.M_inv)
+    O_local = local_ray.origin
+    D_local = local_ray.direction
+    
+    # Cone parameters
+    r = cone.radius
+    h = cone.height
+    k_sq = (r * r) / (h * h)  # k² = (r/h)²
+    
+    # Ray equation: R(t) = O + t*D
+    # Cone equation: x² + z² - k² * y² = 0
+    # Substitute: (O_x + t*D_x)² + (O_z + t*D_z)² - k² * (O_y + t*D_y)² = 0
+    # Expand and group terms:
+    # t²*(D_x² + D_z² - k²*D_y²) + 2*t*(O_x*D_x + O_z*D_z - k²*O_y*D_y) + (O_x² + O_z² - k²*O_y²) = 0
+    
+    # Quadratic coefficients: a*t² + b*t + c = 0
+    a = D_local.x * D_local.x + D_local.z * D_local.z - k_sq * D_local.y * D_local.y
+    b = 2.0 * (O_local.x * D_local.x + O_local.z * D_local.z - k_sq * O_local.y * D_local.y)
+    c = O_local.x * O_local.x + O_local.z * O_local.z - k_sq * O_local.y * O_local.y
+    
+    discriminant = b * b - 4.0 * a * c
+    
+    if discriminant >= 0.0 and ti.abs(a) >= EPSILON:
+        sqrt_disc = tm.sqrt(discriminant)
+        t1 = (-b - sqrt_disc) / (2.0 * a)
+        t2 = (-b + sqrt_disc) / (2.0 * a)
+        
+        # Check both solutions and find the closest valid one
+        t = t_max
+        for candidate_t in ti.static([t1, t2]):
+            if candidate_t > t_min and candidate_t < t_max and candidate_t < t:
+                # Check if intersection point is within cone bounds (0 <= y <= height)
+                P_local = O_local + candidate_t * D_local
+                if P_local.y >= 0.0 and P_local.y <= h:
+                    t = candidate_t
+                    hit.is_hit = True
+        
+        if hit.is_hit:
+            hit.t = t
+            P_local = O_local + t * D_local
+            
+            # Compute normal at intersection point
+            # For cone: x² + z² - k² * y² = 0
+            # Gradient: (2x, -2k²y, 2z)
+            # Normal: normalize(2x, -2k²y, 2z) = normalize(x, -k²y, z)
+            N_local = tm.vec3(P_local.x, -k_sq * P_local.y, P_local.z)
+            N_local = tm.normalize(N_local)
+            
+            # Transform intersection point and normal back to world space
+            P_world_h = cone.M @ tm.vec4(P_local, 1.0)
+            hit.position = P_world_h.xyz
+            
+            M_inv_T = cone.M_inv.transpose()
+            N_world_h = M_inv_T @ tm.vec4(N_local, 0.0)
+            hit.normal = tm.normalize(N_world_h.xyz)
+            
+            hit.mat = cone.material
+    
+    return hit
 
