@@ -698,7 +698,7 @@ def compute_sdf_normal(metaball: Metaball, point: tm.vec3) -> tm.vec3:
     
     # Normalize and return (pointing outward, so negate if needed)
     grad_len = tm.length(gradient)
-    result = tm.vec3(0.0, 1.0, 0.0)  # Default normal if gradient is zero
+    result = tm.vec3(0.0, 0.0, 1.0)  # Default normal if gradient is zero
     if grad_len > EPSILON:
         result = tm.normalize(gradient)
     return result
@@ -722,10 +722,10 @@ def rayMarchMetaball(metaball: Metaball, ray: Ray, t_min: float, t_max: float) -
     D_local = tm.normalize(local_ray.direction)
     
     # Ray marching parameters
-    max_steps = 128
+    max_steps = 256
     min_step_size = 0.001
     max_step_size = 0.1
-    surface_threshold = 0.01  # How close we need to get to surface
+    surface_threshold = 0.001  # How close we need to get to surface
     
     t = t_min
     hit_found = False
