@@ -1,0 +1,21 @@
+{
+"resolution": [640, 480],
+"AA_jitter": false, 
+"AA_samples": 1,
+"ambient": [0.1, 0.1, 0.1],
+"camera": { "position": [0.0, 2.0, 8.0], "lookAt": [0.0, 1.0, 0.0], "up": [0.0, 1.0, 0.0], "fovy": 45.0 },
+"materials": [
+    { "name": "glass", "diffuse": [0.1, 0.1, 0.1], "specular": [0.8, 0.8, 0.8], "shininess": 100, "refraction": 1, "ior": 1.5 },
+    { "name": "black", "diffuse": [0.0, 0.0, 0.0], "specular": [0.0, 0.0, 0.0], "shininess": 0 },
+    { "name": "white", "diffuse": [1.0, 1.0, 1.0], "specular": [0.0, 0.0, 0.0], "shininess": 0 }
+],    
+"objects": [
+    { "name": "checkerboard_plane", "type": "plane", "normal": [0.0, 1.0, 0.0], "position": [0.0, 0.0, 0.0], "materials": ["black", "white"] },
+    { "name": "glass_sphere", "type": "sphere", "radius": 1.0, "position": [0.0, 1.0, 0.0], "materials": ["glass"] }
+],
+"lights": [
+    { "name": "light1", "type": "point", "position": [5, 5, 5], "colour": [0.8, 0.8, 0.8], "attenuation": [0.1, 0.0, 1.0], "power": 200 },
+    { "name": "light2", "type": "point", "position": [-5, 5, 5], "colour": [0.8, 0.8, 0.8], "attenuation": [0.1, 0.0, 1.0], "power": 200 }
+]
+}
+

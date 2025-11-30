@@ -86,7 +86,9 @@ def load_scene(infile: str, image_scale_factor: float = 1.0) -> scene.Scene:
         mat_specular = tm.vec3(material["specular"])
         mat_shininess = 0 if "shininess" not in material else material["shininess"]
         mat_reflection = True if "reflection" in material and material["reflection"] == 1 else False
-        material_by_name[mat_name] = hc.Material(mat_id, mat_diffuse, mat_specular, mat_shininess, mat_reflection)
+        mat_refraction = True if "refraction" in material and material["refraction"] == 1 else False
+        mat_ior = 1.5 if "ior" not in material else material["ior"]  # Default IOR (glass-like)
+        material_by_name[mat_name] = hc.Material(mat_id, mat_diffuse, mat_specular, mat_shininess, mat_reflection, mat_refraction, mat_ior)
         mat_id += 1
 
     # load geometires

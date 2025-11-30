@@ -190,11 +190,18 @@ class Scene:
 
     @ti.func
     def compute_shading(self, intersect: Intersection, ray: Ray) -> tm.vec3:
-        final_color = tm.vec3(1.0, 0.0, 0.0)
-        if not intersect.mat.reflection:
-            final_color =  self.compute_local_shading(intersect, ray)
-        else:
+        final_color = tm.vec3(0.0, 0.0, 0.0)
+        
+        # Check for refraction first (transparent materials)
+        if intersect.mat.refraction:
+            final_color = self.compute_refraction(intersect, ray)
+        # Then check for reflection (mirrors)
+        elif intersect.mat.reflection:
             final_color = self.compute_reflection(intersect, ray)
+        # Otherwise, just local shading
+        else:
+            final_color = self.compute_local_shading(intersect, ray)
+        
         return final_color
     
     @ti.func
@@ -230,5 +237,65 @@ class Scene:
         result_colour = tm.vec3(0.0, 0.0, 0.0)
         if reflected_hit.is_hit:
             result_colour = self.compute_local_shading(reflected_hit, reflected_ray)
+        
+        return result_colour
+
+    @ti.func
+    def compute_refraction(self, intersect: Intersection, ray: Ray) -> tm.vec3:
+        """
+        Compute refraction through transparent material with volume.
+        Handles multiple refractions: enter object, travel through, exit object.
+        Uses Snell's law to compute refracted ray directions.
+        Fully iterative - no recursion.
+        """
+        current_ray = ray
+        current_ior = 1.0  # Start in air
+        current_intersect = intersect
+        max_bounces = 10  # Safety limit to prevent infinite loops
+        bounce_count = 0
+        result_colour = tm.vec3(0.0, 0.0, 0.0)
+        done = False
+        
+        # Trace through the material until we exit and hit something non-refractive
+        while bounce_count < max_bounces and not done:
+            I = current_ray.direction
+            N = current_intersect.normal
+            
+            # Determine entering or exiting based on dot product
+            dot_I_N = tm.dot(I, N)
+            entering = dot_I_N < 0.0
+            
+            # Set up IORs: n1 = current medium, n2 = next medium
+            n1 = current_ior
+            n2 = 1.0  # Air (default)
+            if entering:
+                n2 = current_intersect.mat.ior  # Entering material
+            else:
+                n1 = current_intersect.mat.ior  # Exiting material
+                N = -N  # Flip normal for exiting
+            
+            # Compute refraction using Snell's law
+            eta = n1 / n2
+            cos_theta_i= -tm.dot(I, N)
+            k = 1.0 - eta * eta * (1.0 - cos_theta_i * cos_theta_i)
+            if k < 0.0:
+                # Total Internal Reflection → reflect instead
+                R = I - 2.0 * tm.dot(I, N) * N
+                R = tm.normalize(R)
+                new_origin = current_intersect.position + R * shadow_epsilon
+                current_ray = Ray(new_origin, R)
+                current_ior = current_ior  # stays same medium
+                bounce_count += 1
+                continue
+            T = tm.normalize(eta * I + (eta * cos_theta_i - tm.sqrt(k)) * N)
+            new_origin = current_intersect.position + T * shadow_epsilon
+            current_ray = Ray(new_origin, T)
+            current_intersect = self.intersect_scene(current_ray, shadow_epsilon, float('inf'))
+            current_ior = n2
+            if not current_intersect.mat.refraction:
+                done = True
+                result_colour = self.compute_local_shading(current_intersect, current_ray)
+            bounce_count += 1
+            
         
         return result_colour
