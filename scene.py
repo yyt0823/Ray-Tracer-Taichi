@@ -210,9 +210,6 @@ class Scene:
         
         I = ray.direction  # Incident direction (toward surface)
         N = intersect.normal  # Surface normal (already in world space, points away)
-        print("N", N)
-        print("I", I)
-        
         # Ensure normal points away from surface (dot product should be negative for incoming ray)
         # If dot is positive, flip the normal
         dot_I_N = tm.dot(I, N)
@@ -227,7 +224,7 @@ class Scene:
         reflected_ray = Ray(R_origin, tm.normalize(R_dir))
         
         # Cast the reflected ray into the scene
-        reflected_hit = self.intersect_scene(reflected_ray, shadow_epsilon, 20.0)
+        reflected_hit = self.intersect_scene(reflected_ray, shadow_epsilon, float('inf'))
         
         # If we hit something, return its local shading (what the mirror reflects)
         result_colour = tm.vec3(0.0, 0.0, 0.0)
