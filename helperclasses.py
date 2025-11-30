@@ -22,7 +22,6 @@ def changeRayFrame(ray: Ray, M: tm.mat4) -> Ray:
     return Ray(O_local, D_local)
 
 
-
 @ti.dataclass
 class Material:
         id: int
@@ -40,6 +39,24 @@ class Light:
         colour: tm.vec3   # colour and intensity of the light
         vector: tm.vec3    # position, or normalized direction towards light, depending on the light type
         attenuation: tm.vec3   # attenuation coeffs [quadratic, linear, constant] for point lights
+
+@ti.dataclass
+class Metaball:
+    id: int
+    count: int              
+    threshold: float        
+    material: Material
+    M: tm.mat4
+    M_inv: tm.mat4
+    blob0_pos: tm.vec3
+    blob0_radius: float
+    blob1_pos: tm.vec3
+    blob1_radius: float
+    blob2_pos: tm.vec3
+    blob2_radius: float
+    blob3_pos: tm.vec3
+    blob3_radius: float
+
 
 @ti.dataclass 
 class Intersection:
@@ -67,3 +84,6 @@ def changeIntersectFrame(intersect: Intersection, M: tm.mat4, M_inv: tm.mat4) ->
 
 
     return intersect # change this placeholder to return a transformed intersection
+
+
+
