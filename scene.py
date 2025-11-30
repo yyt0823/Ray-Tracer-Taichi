@@ -28,6 +28,8 @@ class Scene:
                  nb_meshes: int,
                  cones: ti.template(),
                  nb_cones: int,
+                 metaballs: ti.template(),
+                 nb_metaballs: int,
                  meshes_verts: np.array,
                  meshes_faces: np.array,
                  ):
@@ -42,11 +44,13 @@ class Scene:
         self.aaboxes = aaboxes
         self.meshes = meshes
         self.cones = cones
+        self.metaballs = metaballs
         self.nb_spheres = nb_spheres
         self.nb_planes = nb_planes
         self.nb_aaboxes = nb_aaboxes
         self.nb_meshes = nb_meshes
         self.nb_cones = nb_cones
+        self.nb_metaballs = nb_metaballs
 
         self.meshes_verts = ti.Vector.field(3, shape=(max(1, meshes_verts.shape[0])), dtype=float)
         self.meshes_verts.from_numpy(meshes_verts)
@@ -93,6 +97,10 @@ class Scene:
         ti.loop_config(serialize=True) 
         for i in range(self.nb_cones):
             hit = geom.intersectCone(self.cones[i], ray, t_min, t_max)
+            if hit.is_hit: best = hit; t_max = hit.t
+        ti.loop_config(serialize=True) 
+        for i in range(self.nb_metaballs):
+            hit = geom.rayMarchMetaball(self.metaballs[i], ray, t_min, t_max)
             if hit.is_hit: best = hit; t_max = hit.t
         return best
 

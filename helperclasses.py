@@ -40,22 +40,6 @@ class Light:
         vector: tm.vec3    # position, or normalized direction towards light, depending on the light type
         attenuation: tm.vec3   # attenuation coeffs [quadratic, linear, constant] for point lights
 
-@ti.dataclass
-class Metaball:
-    id: int
-    count: int              
-    threshold: float        
-    material: Material
-    M: tm.mat4
-    M_inv: tm.mat4
-    blob0_pos: tm.vec3
-    blob0_radius: float
-    blob1_pos: tm.vec3
-    blob1_radius: float
-    blob2_pos: tm.vec3
-    blob2_radius: float
-    blob3_pos: tm.vec3
-    blob3_radius: float
 
 
 @ti.dataclass 

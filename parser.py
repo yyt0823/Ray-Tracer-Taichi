@@ -149,7 +149,7 @@ def load_scene(infile: str, image_scale_factor: float = 1.0) -> scene.Scene:
         cones[i] = objects["cone"][i]
 
     nb_metaballs = len(objects["metaball"])
-    metaballs = hc.Metaball.field(shape=max(1, nb_metaballs))
+    metaballs = geom.Metaball.field(shape=max(1, nb_metaballs))
     for i in range(len(objects["metaball"])):
         metaballs[i] = objects["metaball"][i]
 
@@ -249,8 +249,8 @@ def load_geometry(geometry, material_by_name, M_parent: tm.mat4 ):
         M, M_inv = load_geometry_transformation_matrix(geometry, M_parent)
         
         # Initialize blob positions and radii arrays
-        blob_positions = [tm.vec3(0.0, 0.0, 0.0)] * 4
-        blob_radii = [0.0] * 4
+        blob_positions = [tm.vec3(0.0, 0.0, 0.0)] * 3
+        blob_radii = [0.0] * 3
         
         # Load blob data using a loop
         for i in range(num_blobs):
@@ -262,13 +262,11 @@ def load_geometry(geometry, material_by_name, M_parent: tm.mat4 ):
         blob0_pos, blob0_radius = blob_positions[0], blob_radii[0]
         blob1_pos, blob1_radius = blob_positions[1], blob_radii[1]
         blob2_pos, blob2_radius = blob_positions[2], blob_radii[2]
-        blob3_pos, blob3_radius = blob_positions[3], blob_radii[3]
         
-        return hc.Metaball(geom_id, num_blobs, g_threshold, g_materials[0], M, M_inv,
+        return geom.Metaball(geom_id, num_blobs, g_threshold, g_materials[0], M, M_inv,
                           blob0_pos, blob0_radius,
                           blob1_pos, blob1_radius,
-                          blob2_pos, blob2_radius,
-                          blob3_pos, blob3_radius)
+                          blob2_pos, blob2_radius)
     else:
         print("Unkown object type", g_type, ", skipping initialization")
         geom_id -= 1  # we cancel the increment of geom_id since we didn't create any geometry

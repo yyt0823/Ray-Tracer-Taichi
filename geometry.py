@@ -606,3 +606,175 @@ def intersectCone(cone: Cone, ray: Ray, t_min: float, t_max: float) -> Intersect
     
     return hit
 
+
+
+
+
+
+
+
+
+
+
+
+
+"""
+Metaball Ray Marching Implementation
+
+Metaballs use a Signed Distance Function (SDF) that blends multiple blobs together.
+The SDF formula: SDF(p) = threshold - sum(radius^2 / distance^2) for each blob
+The surface is where SDF(p) = 0 (or crosses zero).
+"""
+@ti.dataclass
+class Metaball:
+    id: int
+    count: int              
+    threshold: float        
+    material: Material
+    M: tm.mat4
+    M_inv: tm.mat4
+    blob0_pos: tm.vec3
+    blob0_radius: float
+    blob1_pos: tm.vec3
+    blob1_radius: float
+    blob2_pos: tm.vec3
+    blob2_radius: float
+
+
+
+
+@ti.func
+def metaball_sdf(metaball: Metaball, point: tm.vec3) -> float:
+    """Compute the Signed Distance Function for a metaball at a given point.
+    Args:
+        metaball: The metaball object
+        point: Point in local space to evaluate SDF
+    Returns:
+        float: SDF value (positive = inside, negative = outside, zero = on surface)
+    """
+    sdf_value = metaball.threshold
+    
+    # Sum contributions from all active blobs
+    if metaball.count >= 1:
+        dist0 = tm.length(point - metaball.blob0_pos)
+        if dist0 > EPSILON:
+            sdf_value -= metaball.blob0_radius * metaball.blob0_radius / (dist0 * dist0)
+    
+    if metaball.count >= 2:
+        dist1 = tm.length(point - metaball.blob1_pos)
+        if dist1 > EPSILON:
+            sdf_value -= metaball.blob1_radius * metaball.blob1_radius / (dist1 * dist1)
+    
+    if metaball.count >= 3:
+        dist2 = tm.length(point - metaball.blob2_pos)
+        if dist2 > EPSILON:
+            sdf_value -= metaball.blob2_radius * metaball.blob2_radius / (dist2 * dist2)
+    
+    return sdf_value
+
+@ti.func
+def compute_sdf_normal(metaball: Metaball, point: tm.vec3) -> tm.vec3:
+    """Compute the normal vector at a point on the metaball surface using finite differences.
+    Args:
+        metaball: The metaball object
+        point: Point in local space (should be near the surface)
+    Returns:
+        tm.vec3: Normalized normal vector
+    """
+    delta = 0.001  # Small offset for finite differences
+    sdf_center = metaball_sdf(metaball, point)
+    
+    # Compute gradient using finite differences
+    sdf_x = metaball_sdf(metaball, point + tm.vec3(delta, 0.0, 0.0))
+    sdf_y = metaball_sdf(metaball, point + tm.vec3(0.0, delta, 0.0))
+    sdf_z = metaball_sdf(metaball, point + tm.vec3(0.0, 0.0, delta))
+    
+    # Gradient = (df/dx, df/dy, df/dz)
+    gradient = tm.vec3(
+        (sdf_x - sdf_center) / delta,
+        (sdf_y - sdf_center) / delta,
+        (sdf_z - sdf_center) / delta
+    )
+    
+    # Normalize and return (pointing outward, so negate if needed)
+    grad_len = tm.length(gradient)
+    result = tm.vec3(0.0, 1.0, 0.0)  # Default normal if gradient is zero
+    if grad_len > EPSILON:
+        result = tm.normalize(gradient)
+    return result
+
+@ti.func
+def rayMarchMetaball(metaball: Metaball, ray: Ray, t_min: float, t_max: float) -> Intersection:
+    """Ray march through a metaball to find intersection.
+    Args:
+        metaball: The metaball object
+        ray: Ray in world space
+        t_min: Minimum t value for valid intersection
+        t_max: Maximum t value for valid intersection
+    Returns:
+        Intersection: intersection data (is_hit, t, normal, point, material)
+    """
+    hit = Intersection()  # default is no intersection
+    
+    # Transform ray to local space
+    local_ray = changeRayFrame(ray, metaball.M_inv)
+    O_local = local_ray.origin
+    D_local = tm.normalize(local_ray.direction)
+    
+    # Ray marching parameters
+    max_steps = 128
+    min_step_size = 0.001
+    max_step_size = 0.1
+    surface_threshold = 0.01  # How close we need to get to surface
+    
+    t = t_min
+    hit_found = False
+    
+    # Ray march along the ray
+    for step in range(max_steps):
+        if t > t_max:
+            break
+        
+        # Current point along ray
+        P_local = O_local + t * D_local
+        
+        # Evaluate SDF at current point
+        sdf = metaball_sdf(metaball, P_local)
+        
+        # Check if we've hit the surface (SDF close to zero)
+        if ti.abs(sdf) < surface_threshold:
+            hit_found = True
+            break
+        
+        # Step forward by the absolute value of SDF (distance to surface)
+        # But clamp it to reasonable bounds
+        step_size = ti.abs(sdf)
+        if step_size < min_step_size:
+            step_size = min_step_size
+        if step_size > max_step_size:
+            step_size = max_step_size
+        
+        t += step_size
+    
+    if hit_found:
+        # Compute intersection point
+        P_local = O_local + t * D_local
+        
+        # Compute normal at intersection point
+        N_local = compute_sdf_normal(metaball, P_local)
+        
+        # Transform back to world space
+        P_world_h = metaball.M @ tm.vec4(P_local, 1.0)
+        hit.position = P_world_h.xyz
+        
+        M_inv_T = metaball.M_inv.transpose()
+        N_world_h = M_inv_T @ tm.vec4(N_local, 0.0)
+        hit.normal = tm.normalize(N_world_h.xyz)
+        
+        hit.t = t
+        hit.mat = metaball.material
+        hit.is_hit = True
+        hit.hit_count = 0  # No motion blur for metaballs
+    
+    return hit
+

@@ -1,0 +1,75 @@
+{
+  "resolution": [1024, 768],
+  "AA_jitter": false,
+  "AA_samples": 1,
+  "ambient": [0.1, 0.1, 0.1],
+  "camera": {
+    "position": [0.0, 2.0, 8.0],
+    "lookAt": [0.0, 0.0, 0.0],
+    "up": [0.0, 1.0, 0.0],
+    "fovy": 45.0
+  },
+  "materials": [
+    {
+      "name": "metaball_material",
+      "diffuse": [0.8, 0.3, 0.8],
+      "specular": [0.8, 0.8, 0.8],
+      "shininess": 64
+    },
+    {
+      "name": "ground",
+      "diffuse": [0.5, 0.5, 0.5],
+      "specular": [0.3, 0.3, 0.3],
+      "shininess": 16
+    }
+  ],
+  "objects": [
+    {
+      "name": "metaball1",
+      "type": "metaball",
+      "threshold": 1.0,
+      "position": [0.0, 1.0, 0.0],
+      "materials": ["metaball_material"],
+      "blobs": [
+        {
+          "position": [-2, 0.0, -5],
+          "radius": 1
+        },
+        {
+          "position": [2, 0.0, -5],
+          "radius": 1
+        },
+        {
+          "position": [0.0, 1, -5],
+          "radius": 1
+        }
+      ]
+    },
+    {
+      "name": "ground_plane",
+      "type": "plane",
+      "normal": [0.0, 1.0, 0.0],
+      "position": [0.0, -1.0, 0.0],
+      "materials": ["ground"]
+    }
+  ],
+  "lights": [
+    {
+      "name": "main_light",
+      "type": "point",
+      "position": [5.0, 5.0, 5.0],
+      "colour": [1.0, 1.0, 1.0],
+      "power": 1.0,
+      "attenuation": [0.0, 0.0, 1.0]
+    },
+    {
+      "name": "fill_light",
+      "type": "point",
+      "position": [-5.0, 3.0, 5.0],
+      "colour": [0.5, 0.5, 0.7],
+      "power": 0.5,
+      "attenuation": [0.0, 0.0, 1.0]
+    }
+  ]
+}
+
