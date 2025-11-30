@@ -188,8 +188,9 @@ def load_geometry(geometry, material_by_name, M_parent: tm.mat4 ):
 
     if g_type == "sphere":
         g_radius = geometry.get("radius",1)
+        g_motion_dir = tm.vec3(geometry.get("motion_dir", [0, 0, 0]))
         M, M_inv = load_geometry_transformation_matrix(geometry, M_parent)
-        return geom.Sphere(geom_id, g_materials[0], g_radius, M, M_inv)
+        return geom.Sphere(geom_id, g_materials[0], g_radius, M, M_inv, g_motion_dir)
     elif g_type == "plane":
         g_normal = tm.vec3(geometry.get("normal",[0,1,0]))
         M, M_inv = load_geometry_transformation_matrix(geometry, M_parent)
@@ -262,7 +263,7 @@ def load_instance(geometry, node_by_name):
     for obj_type, obj in node:
         if obj is not None:
             if obj_type == "sphere":
-                new_obj = geom.Sphere(obj.id, obj.material, obj.position, obj.radius, M @ obj.M, obj.M_inv @ M_inv )                                      
+                new_obj = geom.Sphere(obj.id, obj.material, obj.radius, M @ obj.M, obj.M_inv @ M_inv, obj.motion_dir)                                      
             elif obj_type == "plane":
                 new_obj = geom.Plane(obj.id, obj.two_materials, obj.material1, obj.material2, obj.position, obj.normal, M @ obj.M, obj.M_inv @ M_inv )            
             elif obj_type == "box":

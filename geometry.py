@@ -6,6 +6,45 @@ import taichi.math as tm
 EPSILON = 10 ** (-5)
 
 @ti.func
+def apply_motion_transform(M: tm.mat4, M_inv: tm.mat4, motion_dir: tm.vec3, time: float) -> (tm.mat4, tm.mat4):
+    """Apply motion blur offset to transformation matrices.
+    Args:
+        M: original transformation matrix
+        M_inv: original inverse transformation matrix
+        motion_dir: motion direction vector per unit time
+        time: time value (0.0 to 1.0)
+    Returns:
+        (M_motion, M_inv_motion): transformed matrices with motion offset
+    """
+    M_motion = M
+    M_inv_motion = M_inv
+    
+    # Only apply motion if motion_dir is significant
+    if tm.length(motion_dir) >= EPSILON:
+        # Create translation matrix for motion offset
+        offset = motion_dir * time
+        translate = tm.mat4([
+            [1.0, 0.0, 0.0, offset.x],
+            [0.0, 1.0, 0.0, offset.y],
+            [0.0, 0.0, 1.0, offset.z],
+            [0.0, 0.0, 0.0, 1.0]
+        ])
+        
+        # Apply translation: M_motion = translate * M
+        M_motion = translate @ M
+        
+        # Inverse: M_inv_motion = M_inv * translate_inv
+        translate_inv = tm.mat4([
+            [1.0, 0.0, 0.0, -offset.x],
+            [0.0, 1.0, 0.0, -offset.y],
+            [0.0, 0.0, 1.0, -offset.z],
+            [0.0, 0.0, 0.0, 1.0]
+        ])
+        M_inv_motion = M_inv @ translate_inv
+    
+    return M_motion, M_inv_motion
+
+@ti.func
 def rayPlaneIntersection(ray_origin: tm.vec3, ray_dir: tm.vec3, plane_point: tm.vec3, plane_normal: tm.vec3) -> float:
     ''' Compute ray-plane intersection t value
     Args:
@@ -36,9 +75,10 @@ class Sphere:
     radius: float
     M: tm.mat4
     M_inv: tm.mat4
+    motion_dir: tm.vec3
 
 @ti.func
-def intersectSphere(sphere: Sphere, ray: Ray, t_min: float, t_max: float) -> Intersection:
+def intersectSphere(sphere: Sphere, ray: Ray, t_min: float, t_max: float, motion_dir: tm.vec3) -> Intersection:
     ''' Ray-sphere intersection  
     Args:
         sphere (Sphere): sphere to intersect with
@@ -57,44 +97,108 @@ def intersectSphere(sphere: Sphere, ray: Ray, t_min: float, t_max: float) -> Int
     '''
 
     hit = Intersection() # default is no intersection (is_hit = False)
-
-    local_ray = changeRayFrame(ray, sphere.M_inv)
-    O_local = local_ray.origin
-    D_local_norm = tm.normalize(local_ray.direction)
-    center = tm.vec3(0.0)
-    radius = sphere.radius
-    a = tm.dot(D_local_norm, D_local_norm)
-    b = 2 * tm.dot(D_local_norm, O_local.xyz)
-    c = tm.dot(O_local.xyz, O_local.xyz) - radius * radius
-    discriminant = b * b - 4.0 * a * c
-    if discriminant >= 0.0:
-        t1 = (-b - tm.sqrt(discriminant)) / (2.0 * a)
-        t2 = (-b + tm.sqrt(discriminant)) / (2.0 * a)
-        t = t_max
-        if t1 > t_min and t1 < t_max:
-            t = t1
-            hit.is_hit = True
-        if t2 > t_min and t2 < t_max and t2 < t:
-            t = t2
-            hit.is_hit = True
+    
+    # Check if motion_dir is valid (non-zero)
+    has_motion = tm.length(motion_dir) >= EPSILON
+    
+    if has_motion:
+        # Test 3 time frames: t=0, t=0.5, t=1.0
+        num_samples = 3
+        hit_count = 0  # Count how many time frames result in hits (1, 2, or 3)
+        best_hit = Intersection()
+        best_t = t_max
         
-        if hit.is_hit:
-            hit.t = t
-
-            # Compute Local Point & Normal
-            P_local = O_local.xyz + t * D_local_norm
-            N_local = tm.normalize(P_local - center) # Normal at the surface
+        for frame in range(num_samples):
+            time = float(frame) / float(num_samples - 1)  # 0.0, 0.5, 1.0
             
-            # 1. Transform Point to World Space (using M)
-            P_world_h = sphere.M @ tm.vec4(P_local, 1.0)
-            hit.position = P_world_h.xyz
-
-            # 2. Transform Normal to World Space (using Inverse Transpose of M)
-            M_inv_T = sphere.M_inv.transpose()
-            N_world_h = M_inv_T @ tm.vec4(N_local, 0.0)
-            hit.normal = tm.normalize(N_world_h.xyz)
+            # Apply motion blur transformation
+            M_motion, M_inv_motion = apply_motion_transform(sphere.M, sphere.M_inv, motion_dir, time)
+            local_ray = changeRayFrame(ray, M_inv_motion)
+            O_local = local_ray.origin
+            D_local_norm = tm.normalize(local_ray.direction)
+            center = tm.vec3(0.0)
+            radius = sphere.radius
+            a = tm.dot(D_local_norm, D_local_norm)
+            b = 2 * tm.dot(D_local_norm, O_local.xyz)
+            c = tm.dot(O_local.xyz, O_local.xyz) - radius * radius
+            discriminant = b * b - 4.0 * a * c
             
-            hit.mat = sphere.material
+            if discriminant >= 0.0:
+                t1 = (-b - tm.sqrt(discriminant)) / (2.0 * a)
+                t2 = (-b + tm.sqrt(discriminant)) / (2.0 * a)
+                t = t_max
+                frame_hit = False
+                if t1 > t_min and t1 < t_max:
+                    t = t1
+                    frame_hit = True
+                if t2 > t_min and t2 < t_max and t2 < t:
+                    t = t2
+                    frame_hit = True
+                
+                if frame_hit:
+                    hit_count += 1  # Increment hit count
+                    # Keep the closest hit for the return value
+                    if t < best_t:
+                        best_t = t
+                        # Compute Local Point & Normal
+                        P_local = O_local.xyz + t * D_local_norm
+                        N_local = tm.normalize(P_local - center)
+                        
+                        # Transform to world space
+                        P_world_h = M_motion @ tm.vec4(P_local, 1.0)
+                        best_hit.position = P_world_h.xyz
+                        
+                        M_inv_T = M_inv_motion.transpose()
+                        N_world_h = M_inv_T @ tm.vec4(N_local, 0.0)
+                        best_hit.normal = tm.normalize(N_world_h.xyz)
+                        best_hit.t = t
+                        best_hit.mat = sphere.material
+                        best_hit.is_hit = True
+        
+        if best_hit.is_hit:
+            hit = best_hit
+            # Store hit count (1, 2, or 3) in hit_count field
+            hit.hit_count = hit_count
+    else:
+        # No motion blur: single intersection test
+        local_ray = changeRayFrame(ray, sphere.M_inv)
+        O_local = local_ray.origin
+        D_local_norm = tm.normalize(local_ray.direction)
+        center = tm.vec3(0.0)
+        radius = sphere.radius
+        a = tm.dot(D_local_norm, D_local_norm)
+        b = 2 * tm.dot(D_local_norm, O_local.xyz)
+        c = tm.dot(O_local.xyz, O_local.xyz) - radius * radius
+        discriminant = b * b - 4.0 * a * c
+        if discriminant >= 0.0:
+            t1 = (-b - tm.sqrt(discriminant)) / (2.0 * a)
+            t2 = (-b + tm.sqrt(discriminant)) / (2.0 * a)
+            t = t_max
+            if t1 > t_min and t1 < t_max:
+                t = t1
+                hit.is_hit = True
+            if t2 > t_min and t2 < t_max and t2 < t:
+                t = t2
+                hit.is_hit = True
+            
+            if hit.is_hit:
+                hit.t = t
+
+                # Compute Local Point & Normal
+                P_local = O_local.xyz + t * D_local_norm
+                N_local = tm.normalize(P_local - center) # Normal at the surface
+                
+                # 1. Transform Point to World Space (using M)
+                P_world_h = sphere.M @ tm.vec4(P_local, 1.0)
+                hit.position = P_world_h.xyz
+
+                # 2. Transform Normal to World Space (using Inverse Transpose of M)
+                M_inv_T = sphere.M_inv.transpose()
+                N_world_h = M_inv_T @ tm.vec4(N_local, 0.0)
+                hit.normal = tm.normalize(N_world_h.xyz)
+                
+                hit.mat = sphere.material
+                hit.hit_count = 0  # No motion blur, so 0 (single hit, not motion blur)
 
     return hit
 

@@ -76,7 +76,7 @@ class Scene:
         best = Intersection() # default is no intersection (is_hit = False)        
         ti.loop_config(serialize=True) 
         for i in range(self.nb_spheres):
-            hit = geom.intersectSphere(self.spheres[i], ray, t_min, t_max )
+            hit = geom.intersectSphere(self.spheres[i], ray, t_min, t_max, self.spheres[i].motion_dir)
             if hit.is_hit: best = hit; t_max = hit.t # keep best hit only
         ti.loop_config(serialize=True) 
         for i in range(self.nb_planes):
@@ -186,6 +186,8 @@ class Scene:
                 # Accumulation
                 sample_colour += diffuse_term + specular_term
 
+                
+
         return sample_colour
 
     @ti.func
@@ -201,6 +203,12 @@ class Scene:
         # Otherwise, just local shading
         else:
             final_color = self.compute_local_shading(intersect, ray)
+        
+        # Apply motion blur weighting based on hit_count
+        # hit_count: 1 -> 1/3, 2 -> 2/3, 3 -> 1.0
+        if intersect.hit_count > 0:
+            weight = float(intersect.hit_count) / 3.0
+            final_color = final_color * weight
         
         return final_color
     

@@ -49,6 +49,8 @@ class Intersection:
         normal: tm.vec3
         position: tm.vec3
         mat: Material
+        motion_dir: tm.vec3
+        hit_count: int  # Number of time frames that hit (1, 2, or 3 for motion blur)
 
 @ti.func
 def changeIntersectFrame(intersect: Intersection, M: tm.mat4, M_inv: tm.mat4) -> Intersection:
