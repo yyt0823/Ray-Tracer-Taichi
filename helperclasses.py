@@ -29,6 +29,7 @@ class Material:
         diffuse: tm.vec3    # kd diffuse coefficient
         specular: tm.vec3    # ks specular coefficient
         shininess: tm.vec3    # specular exponent
+        reflection: bool     
 
 @ti.dataclass
 class Light:

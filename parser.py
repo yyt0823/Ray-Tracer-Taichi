@@ -85,7 +85,8 @@ def load_scene(infile: str, image_scale_factor: float = 1.0) -> scene.Scene:
         mat_diffuse = tm.vec3(material["diffuse"])
         mat_specular = tm.vec3(material["specular"])
         mat_shininess = 0 if "shininess" not in material else material["shininess"]
-        material_by_name[mat_name] = hc.Material(mat_id, mat_diffuse, mat_specular, mat_shininess)
+        mat_reflection = True if "reflection" in material and material["reflection"] == 1 else False
+        material_by_name[mat_name] = hc.Material(mat_id, mat_diffuse, mat_specular, mat_shininess, mat_reflection)
         mat_id += 1
 
     # load geometires

@@ -98,9 +98,13 @@ class Scene:
 
 
     @ti.func
-    def compute_shading(self, intersect: Intersection, ray: Ray) -> tm.vec3:
+    def compute_local_shading(self, intersect: Intersection, ray: Ray) -> tm.vec3:
+        """
+        Compute ONLY local illumination (ambient + diffuse + specular).
+        Does NOT include reflection - that's handled iteratively in compute_shading.
+        """
         sample_colour = tm.vec3(0, 0, 0)
-
+        
         # Ambient shading
         sample_colour += self.ambient * intersect.mat.diffuse
 
@@ -183,3 +187,51 @@ class Scene:
                 sample_colour += diffuse_term + specular_term
 
         return sample_colour
+
+    @ti.func
+    def compute_shading(self, intersect: Intersection, ray: Ray) -> tm.vec3:
+        final_color = tm.vec3(1.0, 0.0, 0.0)
+        if not intersect.mat.reflection:
+            final_color =  self.compute_local_shading(intersect, ray)
+        else:
+            final_color = self.compute_reflection(intersect, ray)
+        return final_color
+    
+    @ti.func
+    def compute_reflection(self, intersect: Intersection, ray: Ray) -> tm.vec3:
+        """
+        Compute pure mirror reflection - single bounce only.
+        For mirrors: shows ONLY what is reflected, no local color from the mirror itself.
+        """
+        # Reflection formula: R = I - 2 * (I · N) * N
+        # I = incident direction (ray direction points toward surface)
+        # N = surface normal (points away from surface)
+        # R = reflected direction (points away from surface)
+        
+        I = ray.direction  # Incident direction (toward surface)
+        N = intersect.normal  # Surface normal (already in world space, points away)
+        print("N", N)
+        print("I", I)
+        
+        # Ensure normal points away from surface (dot product should be negative for incoming ray)
+        # If dot is positive, flip the normal
+        dot_I_N = tm.dot(I, N)
+        if dot_I_N > 0.0:
+            N = -N
+        
+        # Compute reflected direction
+        R_dir = I - 2.0 * tm.dot(I, N) * N
+        
+        # Start reflected ray slightly offset from surface to avoid self-intersection
+        R_origin = intersect.position + N * shadow_epsilon
+        reflected_ray = Ray(R_origin, tm.normalize(R_dir))
+        
+        # Cast the reflected ray into the scene
+        reflected_hit = self.intersect_scene(reflected_ray, shadow_epsilon, 20.0)
+        
+        # If we hit something, return its local shading (what the mirror reflects)
+        result_colour = tm.vec3(0.0, 0.0, 0.0)
+        if reflected_hit.is_hit:
+            result_colour = self.compute_local_shading(reflected_hit, reflected_ray)
+        
+        return result_colour
