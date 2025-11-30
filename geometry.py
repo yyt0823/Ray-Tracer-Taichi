@@ -681,7 +681,7 @@ def compute_sdf_normal(metaball: Metaball, point: tm.vec3) -> tm.vec3:
     Returns:
         tm.vec3: Normalized normal vector
     """
-    delta = 0.001  # Small offset for finite differences
+    delta = 0.1  # Small offset for finite differences
     sdf_center = metaball_sdf(metaball, point)
     
     # Compute gradient using finite differences

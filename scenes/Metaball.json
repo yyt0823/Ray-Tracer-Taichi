@@ -5,7 +5,7 @@
   "ambient": [0.1, 0.1, 0.1],
   "camera": {
     "position": [0.0, 2.0, 8.0],
-    "lookAt": [0.0, 0.0, 0.0],
+    "lookAt": [0.0, 2.0, 0.0],
     "up": [0.0, 1.0, 0.0],
     "fovy": 45.0
   },
@@ -13,7 +13,7 @@
     {
       "name": "metaball_material",
       "diffuse": [0.8, 0.3, 0.8],
-      "specular": [0.8, 0.8, 0.8],
+      "specular": [1, 1, 1],
       "shininess": 64
     },
     {
@@ -32,15 +32,15 @@
       "materials": ["metaball_material"],
       "blobs": [
         {
-          "position": [-2, 0.0, -5],
+          "position": [-1.5, 0.0, -2],
           "radius": 1
         },
         {
-          "position": [2, 0.0, -5],
+          "position": [1.5, 0.0, -2],
           "radius": 1
         },
         {
-          "position": [0.0, 1, -5],
+          "position": [0.0, 1.5, -2],
           "radius": 1
         }
       ]
