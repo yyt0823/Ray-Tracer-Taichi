@@ -388,6 +388,9 @@ class Mesh:
     faces_ids_count: ti.i32  # number of faces in this mesh
     M: tm.mat4
     M_inv: tm.mat4
+    bbox_min: tm.vec3        # local-space axis-aligned bounding box (min corner)
+    bbox_max: tm.vec3        # local-space axis-aligned bounding box (max corner)
+
 
 @ti.func
 def intersectMesh(mesh: Mesh,                  # data for this mesh (start face and number of faces, etc.)
@@ -404,95 +407,135 @@ def intersectMesh(mesh: Mesh,                  # data for this mesh (start face 
     O_local = local_ray.origin
     D_local = local_ray.direction
 
+    # ------------------------------------------------------------------
+    # AABB ACCELERATION (Objective 9: single AABB around each mesh)
+    # Perform a cheap ray-box test in LOCAL space before looping faces.
+    # Taichi does not allow early returns inside non-static control flow,
+    # so we accumulate a "hit_box" boolean and branch once.
+    # ------------------------------------------------------------------
+    hit_box = True
+    t_enter = t_min
+    t_exit = t_max
+
+    # Slab method on each axis
+    for axis in ti.static(range(3)):
+        origin_comp = O_local[axis]
+        dir_comp = D_local[axis]
+        min_comp = mesh.bbox_min[axis]
+        max_comp = mesh.bbox_max[axis]
+
+        if ti.abs(dir_comp) < EPSILON:
+            # Ray parallel to this pair of slabs – must lie within them
+            if origin_comp < min_comp or origin_comp > max_comp:
+                hit_box = False
+        else:
+            inv_dir = 1.0 / dir_comp
+            t0 = (min_comp - origin_comp) * inv_dir
+            t1 = (max_comp - origin_comp) * inv_dir
+            if t0 > t1:
+                tmp = t0
+                t0 = t1
+                t1 = tmp
+
+            if t0 > t_enter:
+                t_enter = t0
+            if t1 < t_exit:
+                t_exit = t1
+
+    # If interval is empty or completely out of [t_min, t_max], no hit
+    if not (t_enter <= t_exit and t_enter <= t_max and t_exit >= t_min):
+        hit_box = False
+
     best_t = t_max
     best_P_local = tm.vec3(0.0)
     best_N_local = tm.vec3(0.0)
     hit_any = False
 
-    # Loop over all faces belonging to this mesh
-    start = mesh.faces_ids_start
-    count = mesh.faces_ids_count
+    if hit_box:
+        # Loop over all faces belonging to this mesh
+        start = mesh.faces_ids_start
+        count = mesh.faces_ids_count
 
-    for fi in range(count):
-        face_index = start + fi
-        # Indices of the triangle vertices in the global vertex array
-        f = meshes_faces[face_index]
-        i0 = f[0]
-        i1 = f[1]
-        i2 = f[2]
+        for fi in range(count):
+            face_index = start + fi
+            # Indices of the triangle vertices in the global vertex array
+            f = meshes_faces[face_index]
+            i0 = f[0]
+            i1 = f[1]
+            i2 = f[2]
 
-        v0 = meshes_verts[i0]
-        v1 = meshes_verts[i1]
-        v2 = meshes_verts[i2]
+            v0 = meshes_verts[i0]
+            v1 = meshes_verts[i1]
+            v2 = meshes_verts[i2]
 
-        # Step 1: Compute triangle normal and edges
-        e1 = v1 - v0
-        e2 = v2 - v0
-        N_tri = tm.cross(e1, e2)
-        N_normalized = tm.normalize(N_tri)
-        
-        # Step 2: Ray-plane intersection (same as plane intersection)
-        N_dot_D = tm.dot(N_normalized, D_local)
-        
-        # Skip if ray is parallel to plane
-        if ti.abs(N_dot_D) < EPSILON:
-            continue
-        
-        # N · (R(t) - v0) = 0
-        # N · (O_local + t*D_local - v0) = 0
-        # Solve: t = -N · (O_local - v0) / (N · D_local)
-        tvec = O_local - v0
-        t = -tm.dot(N_normalized, tvec) / N_dot_D
-        
-        # Check if intersection is within valid t range
-        if t < t_min or t > best_t:
-            continue
-        
-        # Step 3: Compute intersection point
-        P = O_local + t * D_local
-        
-        # Step 4: Use signed areas to check if P is inside triangle
-        # Area of full triangle (v0, v1, v2)
-        area_full_vec = tm.cross(e1, e2)
-        area_full = tm.dot(area_full_vec, N_normalized)  # Project onto normal for signed area
-        
-        if ti.abs(area_full) < EPSILON:
-            continue
-        
-        # Compute signed areas of three sub-triangles formed by point P
-        # Area of triangle (P, v1, v2) - corresponds to barycentric coordinate for v0
-        edge1 = v1 - P
-        edge2 = v2 - P
-        area1_vec = tm.cross(edge1, edge2)
-        area1 = tm.dot(area1_vec, N_normalized)
-        
-        # Area of triangle (P, v2, v0) - corresponds to barycentric coordinate for v1
-        edge3 = v2 - P
-        edge4 = v0 - P
-        area2_vec = tm.cross(edge3, edge4)
-        area2 = tm.dot(area2_vec, N_normalized)
-        
-        # Area of triangle (P, v0, v1) - corresponds to barycentric coordinate for v2
-        edge5 = v0 - P
-        edge6 = v1 - P
-        area3_vec = tm.cross(edge5, edge6)
-        area3 = tm.dot(area3_vec, N_normalized)
-        
-        # Compute barycentric coordinates (normalized by full area)
-        inv_area_full = 1.0 / area_full
-        u = area1 * inv_area_full  # Weight for v0
-        v = area2 * inv_area_full  # Weight for v1
-        w = area3 * inv_area_full  # Weight for v2
-        
-        # Check if point is inside triangle: all barycentrics must be >= 0
-        if u < 0.0 or v < 0.0 or w < 0.0:
-            continue
-        
-        # Valid intersection found!
-        best_t = t
-        hit_any = True
-        best_P_local = P
-        best_N_local = N_normalized
+            # Step 1: Compute triangle normal and edges
+            e1 = v1 - v0
+            e2 = v2 - v0
+            N_tri = tm.cross(e1, e2)
+            N_normalized = tm.normalize(N_tri)
+            
+            # Step 2: Ray-plane intersection (same as plane intersection)
+            N_dot_D = tm.dot(N_normalized, D_local)
+            
+            # Skip if ray is parallel to plane
+            if ti.abs(N_dot_D) < EPSILON:
+                continue
+            
+            # N · (R(t) - v0) = 0
+            # N · (O_local + t*D_local - v0) = 0
+            # Solve: t = -N · (O_local - v0) / (N · D_local)
+            tvec = O_local - v0
+            t = -tm.dot(N_normalized, tvec) / N_dot_D
+            
+            # Check if intersection is within valid t range
+            if t < t_min or t > best_t:
+                continue
+            
+            # Step 3: Compute intersection point
+            P = O_local + t * D_local
+            
+            # Step 4: Use signed areas to check if P is inside triangle
+            # Area of full triangle (v0, v1, v2)
+            area_full_vec = tm.cross(e1, e2)
+            area_full = tm.dot(area_full_vec, N_normalized)  # Project onto normal for signed area
+            
+            if ti.abs(area_full) < EPSILON:
+                continue
+            
+            # Compute signed areas of three sub-triangles formed by point P
+            # Area of triangle (P, v1, v2) - corresponds to barycentric coordinate for v0
+            edge1 = v1 - P
+            edge2 = v2 - P
+            area1_vec = tm.cross(edge1, edge2)
+            area1 = tm.dot(area1_vec, N_normalized)
+            
+            # Area of triangle (P, v2, v0) - corresponds to barycentric coordinate for v1
+            edge3 = v2 - P
+            edge4 = v0 - P
+            area2_vec = tm.cross(edge3, edge4)
+            area2 = tm.dot(area2_vec, N_normalized)
+            
+            # Area of triangle (P, v0, v1) - corresponds to barycentric coordinate for v2
+            edge5 = v0 - P
+            edge6 = v1 - P
+            area3_vec = tm.cross(edge5, edge6)
+            area3 = tm.dot(area3_vec, N_normalized)
+            
+            # Compute barycentric coordinates (normalized by full area)
+            inv_area_full = 1.0 / area_full
+            u = area1 * inv_area_full  # Weight for v0
+            v = area2 * inv_area_full  # Weight for v1
+            w = area3 * inv_area_full  # Weight for v2
+            
+            # Check if point is inside triangle: all barycentrics must be >= 0
+            if u < 0.0 or v < 0.0 or w < 0.0:
+                continue
+            
+            # Valid intersection found!
+            best_t = t
+            hit_any = True
+            best_P_local = P
+            best_N_local = N_normalized
 
     if hit_any:
         out_intersect.is_hit = True

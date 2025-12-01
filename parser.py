@@ -242,6 +242,15 @@ def load_geometry(geometry, material_by_name, M_parent: tm.mat4 ):
         verts = mesh.vertices
         faces = mesh.faces
 
+        # Compute local-space axis-aligned bounding box for acceleration
+        if len(verts) > 0:
+            vmin = verts.min(axis=0)
+            vmax = verts.max(axis=0)
+        else:
+            # Fallback to a tiny box if mesh somehow has no vertices
+            vmin = np.array((0.0, 0.0, 0.0), dtype=np.float32)
+            vmax = np.array((0.0, 0.0, 0.0), dtype=np.float32)
+
         scene_meshes_verts = np.resize(scene_meshes_verts, (meshes_total_nb_verts + len(verts), 3))
         scene_meshes_faces = np.resize(scene_meshes_faces, (meshes_total_nb_faces + len(faces), 3))
         # NOTE: These should really be vectorized!
@@ -252,7 +261,16 @@ def load_geometry(geometry, material_by_name, M_parent: tm.mat4 ):
                                                                       faces[i, 1] + meshes_total_nb_verts,
                                                                       faces[i, 2] + meshes_total_nb_verts))
         # NOTE: an opportunity to transform the verts of the mesh rather than transforming the ray later
-        mesh = geom.Mesh(geom_id, g_materials[0], meshes_total_nb_faces, len(faces), M, M_inv)
+        mesh = geom.Mesh(
+            geom_id,
+            g_materials[0],
+            meshes_total_nb_faces,
+            len(faces),
+            M,
+            M_inv,
+            tm.vec3(vmin.tolist()),
+            tm.vec3(vmax.tolist()),
+        )
         meshes_total_nb_verts += len(verts)
         meshes_total_nb_faces += len(faces)
         return mesh
@@ -366,8 +384,26 @@ def load_geometry(geometry, material_by_name, M_parent: tm.mat4 ):
                 dtype=np.int32
             )
 
+        # Compute local-space bounding box for the tessellated vertices
+        if n_verts > 0:
+            verts_np = np.array(verts_local, dtype=np.float32)
+            vmin = verts_np.min(axis=0)
+            vmax = verts_np.max(axis=0)
+        else:
+            vmin = np.array((0.0, 0.0, 0.0), dtype=np.float32)
+            vmax = np.array((0.0, 0.0, 0.0), dtype=np.float32)
+
         M, M_inv = load_geometry_transformation_matrix(geometry, M_parent)
-        mesh = geom.Mesh(geom_id, g_materials[0], meshes_total_nb_faces, n_faces, M, M_inv)
+        mesh = geom.Mesh(
+            geom_id,
+            g_materials[0],
+            meshes_total_nb_faces,
+            n_faces,
+            M,
+            M_inv,
+            tm.vec3(vmin.tolist()),
+            tm.vec3(vmax.tolist()),
+        )
         meshes_total_nb_verts += n_verts
         meshes_total_nb_faces += n_faces
         return mesh
@@ -411,7 +447,17 @@ def load_instance(geometry, node_by_name):
             elif obj_type == "box":
                 new_obj = geom.AABox(obj.id, obj.material, obj.minpos, obj.maxpos, M @ obj.M, obj.M_inv @ M_inv )  
             elif obj_type == "mesh":
-                new_obj = geom.Mesh(obj.id, obj.material, obj.vert_start, obj.nb_verts, obj.face_start, obj.nb_faces,  M @ obj.M, obj.M_inv @ M_inv )                          
+                # For meshes, preserve face range and local AABB, update transforms
+                new_obj = geom.Mesh(
+                    obj.id,
+                    obj.material,
+                    obj.faces_ids_start,
+                    obj.faces_ids_count,
+                    M @ obj.M,
+                    obj.M_inv @ M_inv,
+                    obj.bbox_min,
+                    obj.bbox_max,
+                )
             elif obj_type == "cone":
                 new_obj = geom.Cone(obj.id, obj.material, obj.radius, obj.height, M @ obj.M, obj.M_inv @ M_inv)
             objects.append((obj_type, new_obj))
