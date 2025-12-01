@@ -16,6 +16,10 @@ class Scene:
                  samples: int,
                  camera: Camera,
                  ambient: tm.vec3,
+                 use_environment: bool,
+                 env_map_data: np.array,
+                 env_map_width: int,
+                 env_map_height: int,
                  lights: ti.template(),
                  nb_lights: int,
                  spheres: ti.template(),
@@ -36,7 +40,24 @@ class Scene:
         self.jitter = jitter  # should rays be jittered
         self.samples = samples  # number of rays per pixel
         self.camera = camera
+        self.use_environment = use_environment
         self.ambient = ambient  # ambient lighting
+
+        # Environment map texture (image-based)
+        env_w = env_map_width if env_map_width > 0 else 0
+        env_h = env_map_height if env_map_height > 0 else 0
+        env_w_clamped = env_w if env_w > 0 else 1
+        env_h_clamped = env_h if env_h > 0 else 1
+        self.use_environment_image = use_environment and env_w > 0 and env_h > 0
+        self.env_map_width = ti.field(dtype=ti.i32, shape=())
+        self.env_map_height = ti.field(dtype=ti.i32, shape=())
+        self.env_map_width[None] = env_w_clamped
+        self.env_map_height[None] = env_h_clamped
+        self.env_map = ti.Vector.field(3, dtype=float, shape=(env_h_clamped, env_w_clamped))
+        env_map_np = env_map_data
+        if env_map_np.shape[0] != env_h_clamped or env_map_np.shape[1] != env_w_clamped:
+            env_map_np = np.zeros((env_h_clamped, env_w_clamped, 3), dtype=np.float32)
+        self.env_map.from_numpy(env_map_np)
         self.lights = lights  # all lights in the scene
         self.nb_lights = nb_lights
         self.spheres = spheres
@@ -61,6 +82,54 @@ class Scene:
 
         self.offsets = ti.field(dtype=ti.f32, shape=((self.samples - 1) * (self.samples - 1) + 1, 2))
 
+    @ti.func
+    def environment_color(self, direction: tm.vec3) -> tm.vec3:
+        """
+        Environment lookup: sample from the environment texture using spherical mapping.
+        """
+        d = tm.normalize(direction)
+        colour = tm.vec3(0.0)
+
+        if self.use_environment and self.use_environment_image:
+            w = self.env_map_width[None]
+            h = self.env_map_height[None]
+            if w > 0 and h > 0:
+                # longitude / latitude mapping
+                phi = ti.atan2(d.z, d.x)
+                u = 0.5 + phi / (2.0 * tm.pi)
+                u = u - ti.floor(u)  # wrap to [0,1)
+                theta = tm.acos(tm.clamp(d.y, -1.0, 1.0))
+                v = theta / tm.pi
+                v = tm.clamp(v, 0.0, 1.0)
+
+                max_w = ti.max(1, w)
+                max_h = ti.max(1, h)
+                tex_u = u * ti.cast(max_w - 1, ti.f32)
+                tex_v = v * ti.cast(max_h - 1, ti.f32)
+                x0 = ti.cast(ti.floor(tex_u), ti.i32)
+                y0 = ti.cast(ti.floor(tex_v), ti.i32)
+                x1 = (x0 + 1) % max_w
+                y1 = ti.min(y0 + 1, max_h - 1)
+                tx = tex_u - ti.floor(tex_u)
+                ty = tex_v - ti.floor(tex_v)
+
+                c00 = self.env_map[y0, x0]
+                c10 = self.env_map[y0, x1]
+                c01 = self.env_map[y1, x0]
+                c11 = self.env_map[y1, x1]
+
+                c0 = c00 * (1.0 - tx) + c10 * tx
+                c1 = c01 * (1.0 - tx) + c11 * tx
+                colour = c0 * (1.0 - ty) + c1 * ty
+
+        return colour
+
+    @ti.func
+    def compute_env_shading(self, intersect: Intersection) -> tm.vec3:
+        """
+        Return diffuse colour sampled from the environment image using the surface normal.
+        """
+        return self.environment_color(intersect.normal)
 
     @ti.kernel
     def render( self, iteration_count: int ):
@@ -68,9 +137,12 @@ class Scene:
             if (y == x) and x%10 == 0: print(".",end='')
             ray = self.camera.create_ray( x, y, self.jitter )
             intersect = self.intersect_scene(ray, 0, float('inf'))
-            sample_colour = tm.vec3(0, 0, 0) # background colour
+            sample_colour = tm.vec3(0.0)
             if intersect.is_hit:
                 sample_colour = self.compute_shading(intersect, ray)
+            else:
+                # Background: plain black (no environment map)ca
+                sample_colour = tm.vec3(0.0)
             self.image[x,y] += (sample_colour - self.image[x,y]) / iteration_count
         print() # end of line after one dot per 10 rows
 
@@ -197,7 +269,7 @@ class Scene:
                 
 
         return sample_colour
-
+        
     @ti.func
     def compute_shading(self, intersect: Intersection, ray: Ray) -> tm.vec3:
         final_color = tm.vec3(0.0, 0.0, 0.0)
@@ -210,7 +282,10 @@ class Scene:
             final_color = self.compute_reflection(intersect, ray)
         # Otherwise, just local shading
         else:
-            final_color = self.compute_local_shading(intersect, ray)
+            if self.use_environment:
+                final_color = self.compute_env_shading(intersect)
+            else:
+                final_color = self.compute_local_shading(intersect, ray)
         
         # Apply motion blur weighting based on hit_count
         # hit_count: 1 -> 1/3, 2 -> 2/3, 3 -> 1.0

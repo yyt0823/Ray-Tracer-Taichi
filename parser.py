@@ -1,4 +1,6 @@
 import json5 as json
+import os
+from PIL import Image
 import helperclasses as hc
 from camera import Camera
 import geometry as geom
@@ -43,6 +45,23 @@ def load_scene(infile: str, image_scale_factor: float = 1.0) -> scene.Scene:
 
     # Loading ambient light
     ambient = tm.vec3(data.get("ambient", [0.1, 0.1, 0.1])) # set a reasonable default ambient light
+
+    # Loading environment map (image-based)
+    env_conf = data.get("environment")
+    use_environment = False
+    env_pixels = np.zeros((1, 1, 3), dtype=np.float32)
+    env_w = env_h = 0
+    if env_conf:
+        use_environment = env_conf.get("enabled", True)
+        image_path = env_conf.get("image")
+        if image_path:
+            # Treat as path relative to the scene file (no extra magic)
+            resolved = os.path.join(os.path.dirname(os.path.abspath(infile)), image_path)
+            with Image.open(resolved) as img:
+                img = img.convert("RGB")
+                env_w, env_h = img.width, img.height
+                env_pixels = np.asarray(img, dtype=np.float32) / 255.0
+
 
     # Loading Anti-Aliasing options    
     jitter = data.get( "AA_jitter", False ) # default to no jitter
@@ -159,7 +178,9 @@ def load_scene(infile: str, image_scale_factor: float = 1.0) -> scene.Scene:
 
     return scene.Scene( jitter, samples,  # General settings
                 camera,  # Camera settings
-                ambient, lights, nb_lights,  # Light settings
+                ambient,
+                use_environment, env_pixels, env_w, env_h,
+                lights, nb_lights,  # Light settings
                 spheres, nb_spheres,
                 planes, nb_planes,
                 boxes, nb_boxes,
