@@ -28,3 +28,10 @@ Objective 9
 -- for shader use the total hit to calculate the fraction of color accumulating 
 -- you can run this CLI to test : 
     python main.py -i scenes/Sphere_motion.json -s
+
+1.5 point
+-- Geometry : Ray marched implicits --> Metaballs
+-- use ray marching to determine the surface of a metaball field defined by multiple implicit spheres
+-- you can run this CLI to test :
+   python main.py -i scenes/Metaball.json -s
+
