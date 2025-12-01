@@ -55,8 +55,10 @@ Objective 9
     
 1 point
 -- Textures : Spherical environment map
--- load a lat-long environment image (see scenes/Sphere_env.json using textures/sky.png) and sample it for background + reflection rays
--- falls back to a gradient sky/ground if the image is missing or disabled
--- you can render a simple scene with the environment map by running:
+-- load a environment image (see scenes/Sphere_env.json using textures/cathedral.png) 
+-- convert the relfected vector to position on the img and sample nearby pixcels color 
+-- you can run this CLI to test :
     python main.py -i scenes/Sphere_env.json -s
--- or open "out/Sphere_env.png" after rendering to view the environment reflections
+-- or 
+    open "out/Sphere_env.png" 
+
