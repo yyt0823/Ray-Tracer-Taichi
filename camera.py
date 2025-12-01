@@ -23,36 +23,50 @@ class Camera:
 			member variables must be of taich tm.vec3 types so that they used 
 			in the create_ray Taichi function.  
 		'''
+		# Store width and height in fields for kernel caching (even though we keep Python members for external access)
 		self.width = width
-		self.height = height		
-		self.distance_to_plane = 1.0
-
-		# TODO: Objective 1: Compute camera frame basis vectors, and top bottom left right for ray generation
-		# NOTE: glm vectors are passed in to permit the work to be done here in python, but stored vectors must be tm.vec3
-		self.eye_position = tm.vec3(eye_position.x, eye_position.y, eye_position.z)
+		self.height = height
+		self.width_field = ti.field(dtype=int, shape=())
+		self.width_field[None] = width
+		self.height_field = ti.field(dtype=int, shape=())
+		self.height_field[None] = height
+		
+		# Store camera members in fields for kernel caching
+		self.distance_to_plane = ti.field(dtype=float, shape=())
+		self.distance_to_plane[None] = 1.0
+		
+		self.eye_position = ti.Vector.field(3, dtype=float, shape=())
+		self.eye_position[None] = tm.vec3(eye_position.x, eye_position.y, eye_position.z)
 
 		# set up for u v w 
 		w_glm = glm.normalize(eye_position - lookat)
-		self.w = tm.vec3(w_glm.x, w_glm.y, w_glm.z)
+		self.w = ti.Vector.field(3, dtype=float, shape=())
+		self.w[None] = tm.vec3(w_glm.x, w_glm.y, w_glm.z)
 
 		u_glm = glm.normalize(glm.cross(up, w_glm))
-		self.u = tm.vec3(u_glm.x, u_glm.y, u_glm.z)
+		self.u = ti.Vector.field(3, dtype=float, shape=())
+		self.u[None] = tm.vec3(u_glm.x, u_glm.y, u_glm.z)
 
 		v_glm = glm.cross(w_glm, u_glm)
-		self.v = tm.vec3(v_glm.x, v_glm.y, v_glm.z)
+		self.v = ti.Vector.field(3, dtype=float, shape=())
+		self.v[None] = tm.vec3(v_glm.x, v_glm.y, v_glm.z)
 
 		# set up for top bottom left right
 		fovy_rad = math.radians(fovy)
-		half_height = self.distance_to_plane * math.tan(fovy_rad / 2.0)
+		half_height = self.distance_to_plane[None] * math.tan(fovy_rad / 2.0)
 
-		self.top = half_height
-		self.bottom = -half_height
+		self.top = ti.field(dtype=float, shape=())
+		self.top[None] = half_height
+		self.bottom = ti.field(dtype=float, shape=())
+		self.bottom[None] = -half_height
 
 		aspect_ratio = self.width / self.height
 		half_width = half_height * aspect_ratio
 
-		self.right = half_width
-		self.left = -half_width
+		self.right = ti.field(dtype=float, shape=())
+		self.right[None] = half_width
+		self.left = ti.field(dtype=float, shape=())
+		self.left[None] = -half_width
 		
 		
 	
@@ -82,13 +96,13 @@ class Camera:
 			# Sub-pixel offset should be random between 0.0 and 1.0
 			x_offset = ti.random(float)
 			y_offset = ti.random(float)
-		u_coord = self.left + (x + x_offset) * (self.right - self.left) / self.width
-		v_coord = self.bottom + (y + y_offset) * (self.top - self.bottom) / self.height
+		u_coord = self.left[None] + (x + x_offset) * (self.right[None] - self.left[None]) / self.width_field[None]
+		v_coord = self.bottom[None] + (y + y_offset) * (self.top[None] - self.bottom[None]) / self.height_field[None]
 		d = (
-            - self.distance_to_plane * self.w
-            + u_coord * self.u
-            + v_coord * self.v
+            - self.distance_to_plane[None] * self.w[None]
+            + u_coord * self.u[None]
+            + v_coord * self.v[None]
         )
 		d = tm.normalize(d)
-		return Ray(self.eye_position, d)
+		return Ray(self.eye_position[None], d)
 

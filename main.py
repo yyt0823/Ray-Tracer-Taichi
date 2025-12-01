@@ -15,8 +15,10 @@ parse.add_argument('-ti', '--taichi', type=str, default='cpu', help="Taichi back
 
 args = parse.parse_args()
 
-def save_image( image: ti.Vector.field, scene_file_name: str, outdir_name: str ):
+def save_image( image: ti.Vector.field, scene_file_name: str, outdir_name: str, width: int, height: int ):
         img = image.to_numpy()
+        # Crop to actual image size (image field may be larger for kernel caching)
+        img = img[:width, :height]
         # remove the path and extension from scene file, put it in outdir with png extension
         outdir = pathlib.Path(outdir_name)
         outdir.mkdir(exist_ok=True) # Create output directory if it doesn't exist
@@ -31,13 +33,13 @@ def save_image( image: ti.Vector.field, scene_file_name: str, outdir_name: str )
 if __name__ == "__main__":
 
     if args.taichi == 'vulkan':
-        ti.init(ti.vulkan)
+        ti.init(ti.vulkan, log_level=ti.DEBUG)
     elif args.taichi == 'cuda':
-        ti.init(ti.cuda)
+        ti.init(ti.cuda, log_level=ti.DEBUG)
     elif args.taichi == 'metal':
-        ti.init(ti.metal)
+        ti.init(ti.metal, log_level=ti.DEBUG)
     else:
-        ti.init(ti.cpu)
+        ti.init(ti.cpu, log_level=ti.DEBUG)
 
     for scene_file_name in args.infile:
         full_scene = parser.load_scene(scene_file_name, image_scale_factor=args.factor)
@@ -46,18 +48,21 @@ if __name__ == "__main__":
         if args.show:
             gui = ti.GUI('Image', (full_scene.camera.width, full_scene.camera.height)) 
             iteration = 1
+            num_samples = full_scene.samples[None]
             while gui.running:
-                if iteration <= full_scene.samples and full_scene.samples > 0:
+                if iteration <= num_samples and num_samples > 0:
                     full_scene.render(iteration)
-                    print(f"Completed {iteration-1} / {full_scene.samples} samples per pixel")
+                    print(f"Completed {iteration-1} / {num_samples} samples per pixel")
                     iteration += 1
                 gui.set_image( full_scene.image )
                 gui.show()
-            save_image( full_scene.image, scene_file_name, args.outdir )
+            save_image( full_scene.image, scene_file_name, args.outdir, full_scene.camera.width, full_scene.camera.height )
         else:
-            if full_scene.samples < 0:
-                full_scene.samples = 1  # just do one iteration if not showing and requesting infinite samples
-            for iteration in range(1, full_scene.samples + 1):
+            num_samples = full_scene.samples[None]
+            if num_samples < 0:
+                full_scene.samples[None] = 1  # just do one iteration if not showing and requesting infinite samples
+                num_samples = 1
+            for iteration in range(1, num_samples + 1):
                 full_scene.render( iteration )
-                print(f"Completed {iteration} / {full_scene.samples} samples per pixel")        
-            save_image( full_scene.image, scene_file_name, args.outdir )
+                print(f"Completed {iteration} / {num_samples} samples per pixel")        
+            save_image( full_scene.image, scene_file_name, args.outdir, full_scene.camera.width, full_scene.camera.height )

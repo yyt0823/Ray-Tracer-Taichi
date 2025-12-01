@@ -89,10 +89,10 @@ def load_scene(infile: str, image_scale_factor: float = 1.0) -> scene.Scene:
             continue
         lights_tmp.append(hc.Light(l_type, len(lights_tmp), l_colour * l_power, l_vector, l_attenuation))
 
-    # Taichi does not accept a zero-length field, so we create a field of size 1 if the list is empty.
-    # This means we need to keep track of the actual number of lights separately.
+    # Use fixed field size for kernel caching (allow up to 10 lights)
+    # Store actual count in a field to avoid affecting kernel hash
     nb_lights = len(lights_tmp)
-    lights = hc.Light.field(shape=max(1, nb_lights))
+    lights = hc.Light.field(shape=max(10, nb_lights))
     for i in range(len(lights_tmp)):
         lights[i] = lights_tmp[i]
 
@@ -144,35 +144,35 @@ def load_scene(infile: str, image_scale_factor: float = 1.0) -> scene.Scene:
 
     print("Loaded", geom_id + 1, "geometric objects")
 
-    # Taichi does not accept a zero-length field, so we create a field of size 1 if the list is empty.
-    # This means we need to keep track of the actual number of objects separately.
+    # Use fixed field sizes for kernel caching
+    # Store actual counts in fields to avoid affecting kernel hash
     nb_spheres = len(objects["sphere"])
-    spheres = geom.Sphere.field(shape=max(1, nb_spheres))
+    spheres = geom.Sphere.field(shape=max(10000, nb_spheres))
     for i in range(len(objects["sphere"])):
         spheres[i] = objects["sphere"][i]
 
     nb_planes = len(objects["plane"])
-    planes = geom.Plane.field(shape=max(1, nb_planes))
+    planes = geom.Plane.field(shape=max(50, nb_planes))
     for i in range(len(objects["plane"])):
         planes[i] = objects["plane"][i]
 
     nb_boxes = len(objects["box"])
-    boxes = geom.AABox.field(shape=max(1, nb_boxes))
+    boxes = geom.AABox.field(shape=max(50, nb_boxes))
     for i in range(len(objects["box"])):
         boxes[i] = objects["box"][i]
 
     nb_meshes = len(objects["mesh"])
-    meshes = geom.Mesh.field(shape=max(1, nb_meshes))
+    meshes = geom.Mesh.field(shape=max(50, nb_meshes))
     for i in range(len(objects["mesh"])):
         meshes[i] = objects["mesh"][i]
 
     nb_cones = len(objects["cone"])
-    cones = geom.Cone.field(shape=max(1, nb_cones))
+    cones = geom.Cone.field(shape=max(50, nb_cones))
     for i in range(len(objects["cone"])):
         cones[i] = objects["cone"][i]
 
     nb_metaballs = len(objects["metaball"])
-    metaballs = geom.Metaball.field(shape=max(1, nb_metaballs))
+    metaballs = geom.Metaball.field(shape=max(20, nb_metaballs))
     for i in range(len(objects["metaball"])):
         metaballs[i] = objects["metaball"][i]
 

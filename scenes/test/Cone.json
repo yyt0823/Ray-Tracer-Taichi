@@ -1,0 +1,21 @@
+{
+"resolution": [640, 480],
+"AA_jitter": false, 
+"AA_samples": 1,
+"ambient": [0.1, 0.1, 0.1],
+"camera": { "position": [0.0, 4.0, 6.0], "lookAt": [0.0, 2.0, 0.0], "up": [0.0, 1.0, 0.0], "fovy": 45.0 },
+"materials": [
+    { "name": "red",   "diffuse": [1,0,0],  "specular": [0.5, 0.5, 0.5], "shininess": 50 },
+    { "name": "black", "diffuse": [0,0,0],  "specular": [0.0, 0.0, 0.0], "shininess": 0 },
+    { "name": "white", "diffuse": [1,1,1],  "specular": [0.0, 0.0, 0.0], "shininess": 0 }
+],    
+"objects": [
+    { "name": "plane", "type": "plane", "normal": [0.0, 1.0, 0.0], "position": [0.0, 0.0, 0.0], "materials": ["black", "white"] },
+    { "name": "cone0", "type": "cone", "radius": 1.0, "height": 2.0, "position": [0.0, 1.0, 0.0], "materials": ["red"], "rotation": [180, 0, 0] }
+],
+"lights": [
+    { "name": "light1", "type": "point", "position": [ 10,  5, 10], "colour": [0.8, 0.8, 0.8], "attenuation": [1,0,0], "power": 300 },
+    { "name": "light2", "type": "point", "position": [-10, 10,  2], "colour": [0.8, 0.8, 0.8], "attenuation": [1,0,0], "power": 300 }
+]
+}
+

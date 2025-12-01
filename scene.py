@@ -37,50 +37,100 @@ class Scene:
                  meshes_verts: np.array,
                  meshes_faces: np.array,
                  ):
-        self.jitter = jitter  # should rays be jittered
-        self.samples = samples  # number of rays per pixel
         self.camera = camera
-        self.use_environment = use_environment
-        self.ambient = ambient  # ambient lighting
+        
+        # Store kernel parameters in fields for kernel caching
+        self.jitter = ti.field(dtype=ti.i32, shape=())
+        self.jitter[None] = 1 if jitter else 0
+        self.samples = ti.field(dtype=int, shape=())
+        self.samples[None] = samples
+        self.use_environment = ti.field(dtype=ti.i32, shape=())
+        self.use_environment[None] = 1 if use_environment else 0
+        
+        # Store ambient in a field for kernel caching
+        self.ambient = ti.Vector.field(3, dtype=float, shape=())
+        self.ambient[None] = ambient
 
-        # Environment map texture (image-based)
+        # Environment map texture (image-based) - use fixed size for kernel caching
         env_w = env_map_width if env_map_width > 0 else 0
         env_h = env_map_height if env_map_height > 0 else 0
         env_w_clamped = env_w if env_w > 0 else 1
         env_h_clamped = env_h if env_h > 0 else 1
-        self.use_environment_image = use_environment and env_w > 0 and env_h > 0
+        # Use fixed maximum size for environment map (2048x1024) for kernel caching
+        # This must be a constant, not max(), to ensure field size doesn't change
+        max_env_w = 2048
+        max_env_h = 1024
+        self.use_environment_image = ti.field(dtype=ti.i32, shape=())
+        self.use_environment_image[None] = 1 if (use_environment and env_w > 0 and env_h > 0) else 0
         self.env_map_width = ti.field(dtype=ti.i32, shape=())
         self.env_map_height = ti.field(dtype=ti.i32, shape=())
         self.env_map_width[None] = env_w_clamped
         self.env_map_height[None] = env_h_clamped
-        self.env_map = ti.Vector.field(3, dtype=float, shape=(env_h_clamped, env_w_clamped))
+        self.env_map = ti.Vector.field(3, dtype=float, shape=(max_env_h, max_env_w))
         env_map_np = env_map_data
-        if env_map_np.shape[0] != env_h_clamped or env_map_np.shape[1] != env_w_clamped:
-            env_map_np = np.zeros((env_h_clamped, env_w_clamped, 3), dtype=np.float32)
+        if env_map_np.shape[0] != max_env_h or env_map_np.shape[1] != max_env_w:
+            # Pad or resize to fixed size
+            padded = np.zeros((max_env_h, max_env_w, 3), dtype=np.float32)
+            if env_map_np.shape[0] > 0 and env_map_np.shape[1] > 0:
+                h_min = min(env_map_np.shape[0], max_env_h)
+                w_min = min(env_map_np.shape[1], max_env_w)
+                padded[:h_min, :w_min] = env_map_np[:h_min, :w_min]
+            env_map_np = padded
         self.env_map.from_numpy(env_map_np)
         self.lights = lights  # all lights in the scene
-        self.nb_lights = nb_lights
+        
+        # Store all counts in fields for kernel caching
+        self.nb_lights = ti.field(dtype=int, shape=())
+        self.nb_lights[None] = nb_lights
         self.spheres = spheres
         self.planes = planes
         self.aaboxes = aaboxes
         self.meshes = meshes
         self.cones = cones
         self.metaballs = metaballs
-        self.nb_spheres = nb_spheres
-        self.nb_planes = nb_planes
-        self.nb_aaboxes = nb_aaboxes
-        self.nb_meshes = nb_meshes
-        self.nb_cones = nb_cones
-        self.nb_metaballs = nb_metaballs
+        self.nb_spheres = ti.field(dtype=int, shape=())
+        self.nb_spheres[None] = nb_spheres
+        self.nb_planes = ti.field(dtype=int, shape=())
+        self.nb_planes[None] = nb_planes
+        self.nb_aaboxes = ti.field(dtype=int, shape=())
+        self.nb_aaboxes[None] = nb_aaboxes
+        self.nb_meshes = ti.field(dtype=int, shape=())
+        self.nb_meshes[None] = nb_meshes
+        self.nb_cones = ti.field(dtype=int, shape=())
+        self.nb_cones[None] = nb_cones
+        self.nb_metaballs = ti.field(dtype=int, shape=())
+        self.nb_metaballs[None] = nb_metaballs
 
-        self.meshes_verts = ti.Vector.field(3, shape=(max(1, meshes_verts.shape[0])), dtype=float)
-        self.meshes_verts.from_numpy(meshes_verts)
-        self.meshes_faces = ti.Vector.field(3, shape=(max(1, meshes_faces.shape[0])), dtype=int)
-        self.meshes_faces.from_numpy(meshes_faces)
+        # Use fixed maximum sizes for mesh data to enable kernel caching
+        # Fixed at 1M vertices and 1M faces (must be constant, not max())
+        max_verts = 1000000
+        max_faces = 1000000
+        self.meshes_verts = ti.Vector.field(3, shape=(max_verts,), dtype=float)
+        verts_padded = np.zeros((max_verts, 3), dtype=np.float32)
+        if meshes_verts.shape[0] > 0:
+            verts_padded[:meshes_verts.shape[0]] = meshes_verts
+        self.meshes_verts.from_numpy(verts_padded)
+        self.meshes_faces = ti.Vector.field(3, shape=(max_faces,), dtype=int)
+        faces_padded = np.zeros((max_faces, 3), dtype=np.int32)
+        if meshes_faces.shape[0] > 0:
+            faces_padded[:meshes_faces.shape[0]] = meshes_faces
+        self.meshes_faces.from_numpy(faces_padded)
 
-        self.image = ti.Vector.field( n=3, dtype=float, shape=(self.camera.width, self.camera.height) )
+        # Use fixed maximum image size for kernel caching (Full HD: 1920x1080)
+        # This must be a constant, not max(), to ensure field size doesn't change between scenes
+        max_image_width = 1920
+        max_image_height = 1080
+        self.image = ti.Vector.field( n=3, dtype=float, shape=(max_image_width, max_image_height) )
+        # Store actual image dimensions in fields
+        self.image_width = ti.field(dtype=int, shape=())
+        self.image_width[None] = self.camera.width
+        self.image_height = ti.field(dtype=int, shape=())
+        self.image_height[None] = self.camera.height
 
-        self.offsets = ti.field(dtype=ti.f32, shape=((self.samples - 1) * (self.samples - 1) + 1, 2))
+        # Use fixed maximum size for offsets (support up to 100 samples)
+        max_samples = 100
+        max_offsets_size = (max_samples - 1) * (max_samples - 1) + 1
+        self.offsets = ti.field(dtype=ti.f32, shape=(max_offsets_size, 2))
 
     @ti.func
     def environment_color(self, direction: tm.vec3) -> tm.vec3:
@@ -90,7 +140,7 @@ class Scene:
         d = tm.normalize(direction)
         colour = tm.vec3(0.0)
 
-        if self.use_environment and self.use_environment_image:
+        if self.use_environment[None] != 0 and self.use_environment_image[None] != 0:
             w = self.env_map_width[None]
             h = self.env_map_height[None]
             if w > 0 and h > 0:
@@ -133,9 +183,11 @@ class Scene:
 
     @ti.kernel
     def render( self, iteration_count: int ):
-        for x,y in ti.ndrange(self.camera.width, self.camera.height):
+        width = self.image_width[None]
+        height = self.image_height[None]
+        for x,y in ti.ndrange(width, height):
             if (y == x) and x%10 == 0: print(".",end='')
-            ray = self.camera.create_ray( x, y, self.jitter )
+            ray = self.camera.create_ray( x, y, self.jitter[None] != 0 )
             intersect = self.intersect_scene(ray, 0, float('inf'))
             sample_colour = tm.vec3(0.0)
             if intersect.is_hit:
@@ -151,27 +203,27 @@ class Scene:
     def intersect_scene(self, ray: Ray, t_min: float, t_max: float) -> Intersection:
         best = Intersection() # default is no intersection (is_hit = False)        
         ti.loop_config(serialize=True) 
-        for i in range(self.nb_spheres):
+        for i in range(self.nb_spheres[None]):
             hit = geom.intersectSphere(self.spheres[i], ray, t_min, t_max, self.spheres[i].motion_dir)
             if hit.is_hit: best = hit; t_max = hit.t # keep best hit only
         ti.loop_config(serialize=True) 
-        for i in range(self.nb_planes):
+        for i in range(self.nb_planes[None]):
             hit = geom.intersectPlane(self.planes[i], ray, t_min, t_max )
             if hit.is_hit: best = hit; t_max = hit.t                
         ti.loop_config(serialize=True) 
-        for i in range(self.nb_aaboxes):
+        for i in range(self.nb_aaboxes[None]):
             hit = geom.intersectAABox(self.aaboxes[i], ray, t_min, t_max )
             if hit.is_hit: best = hit; t_max = hit.t
         ti.loop_config(serialize=True) 
-        for i in range(self.nb_meshes):
+        for i in range(self.nb_meshes[None]):
             hit = geom.intersectMesh(self.meshes[i], self.meshes_verts, self.meshes_faces, ray, t_min, t_max)
             if hit.is_hit: best = hit; t_max = hit.t
         ti.loop_config(serialize=True) 
-        for i in range(self.nb_cones):
+        for i in range(self.nb_cones[None]):
             hit = geom.intersectCone(self.cones[i], ray, t_min, t_max)
             if hit.is_hit: best = hit; t_max = hit.t
         ti.loop_config(serialize=True) 
-        for i in range(self.nb_metaballs):
+        for i in range(self.nb_metaballs[None]):
             hit = geom.rayMarchMetaball(self.metaballs[i], ray, t_min, t_max)
             if hit.is_hit: best = hit; t_max = hit.t
         return best
@@ -186,10 +238,10 @@ class Scene:
         sample_colour = tm.vec3(0, 0, 0)
         
         # Ambient shading
-        sample_colour += self.ambient * intersect.mat.diffuse
+        sample_colour += self.ambient[None] * intersect.mat.diffuse
 
         ti.loop_config(serialize=True) 
-        for l in range(self.nb_lights):
+        for l in range(self.nb_lights[None]):
             current_light = self.lights[l]
 
             # Initialize variables
@@ -282,7 +334,7 @@ class Scene:
             final_color = self.compute_reflection(intersect, ray)
         # Otherwise, just local shading
         else:
-            if self.use_environment:
+            if self.use_environment[None] != 0:
                 final_color = self.compute_env_shading(intersect)
             else:
                 final_color = self.compute_local_shading(intersect, ray)
