@@ -641,6 +641,77 @@ class Metaball:
     blob2_radius: float
 
 
+"""
+Bezier Surface Patch Data Structure
+
+We represent a single bicubic Bezier surface patch using 4x4 control points.
+Each control point is a tm.vec3 in the object's local space. The patch is also
+equipped with a material and object-to-world/world-to-object transforms, just
+like other geometry types.
+"""
+@ti.dataclass
+class BezierPatch:
+    id: int
+    material: Material
+    M: tm.mat4
+    M_inv: tm.mat4
+    # 4x4 grid of control points (u in rows, v in columns)
+    p00: tm.vec3; p01: tm.vec3; p02: tm.vec3; p03: tm.vec3
+    p10: tm.vec3; p11: tm.vec3; p12: tm.vec3; p13: tm.vec3
+    p20: tm.vec3; p21: tm.vec3; p22: tm.vec3; p23: tm.vec3
+    p30: tm.vec3; p31: tm.vec3; p32: tm.vec3; p33: tm.vec3
+
+
+@ti.func
+def eval_bezier_patch(patch: BezierPatch, u: float, v: float) -> tm.vec3:
+    """Evaluate bicubic Bezier patch position at parameters (u, v)."""
+    # Clamp to [0, 1] to be safe
+    uu = tm.clamp(u, 0.0, 1.0)
+    vv = tm.clamp(v, 0.0, 1.0)
+
+    # Cubic Bernstein basis for u
+    itu = 1.0 - uu
+    bu0 = itu * itu * itu
+    bu1 = 3.0 * uu * itu * itu
+    bu2 = 3.0 * uu * uu * itu
+    bu3 = uu * uu * uu
+
+    # Cubic Bernstein basis for v
+    itv = 1.0 - vv
+    bv0 = itv * itv * itv
+    bv1 = 3.0 * vv * itv * itv
+    bv2 = 3.0 * vv * vv * itv
+    bv3 = vv * vv * vv
+
+    P = tm.vec3(0.0, 0.0, 0.0)
+
+    # Row 0
+    P += bu0 * bv0 * patch.p00
+    P += bu0 * bv1 * patch.p01
+    P += bu0 * bv2 * patch.p02
+    P += bu0 * bv3 * patch.p03
+    # Row 1
+    P += bu1 * bv0 * patch.p10
+    P += bu1 * bv1 * patch.p11
+    P += bu1 * bv2 * patch.p12
+    P += bu1 * bv3 * patch.p13
+    # Row 2
+    P += bu2 * bv0 * patch.p20
+    P += bu2 * bv1 * patch.p21
+    P += bu2 * bv2 * patch.p22
+    P += bu2 * bv3 * patch.p23
+    # Row 3
+    P += bu3 * bv0 * patch.p30
+    P += bu3 * bv1 * patch.p31
+    P += bu3 * bv2 * patch.p32
+    P += bu3 * bv3 * patch.p33
+
+    return P
+
+
+
+
+
 
 
 @ti.func

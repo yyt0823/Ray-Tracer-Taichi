@@ -35,3 +35,8 @@ Objective 9
 -- you can run this CLI to test :
    python main.py -i scenes/Metaball.json -s
 
+
+2 point
+-- Geometry : Bezier surface patches --> Teapot
+-- use evalpatch and tesslation to convert
+-- following the idea of : https://www.scratchapixel.com/lessons/geometry/bezier-curve-rendering-utah-teapot/bezier-surface.html

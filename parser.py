@@ -114,7 +114,11 @@ def load_scene(infile: str, image_scale_factor: float = 1.0) -> scene.Scene:
         else:
             g = load_geometry(geometry, material_by_name, M_parent)
             if g is not None:
-                objects[geometry["type"]].append(g)
+                obj_type = geometry["type"]
+                # Bezier patches are tessellated into triangle meshes
+                if obj_type == "bezier":
+                    obj_type = "mesh"
+                objects[obj_type].append(g)
                 # check if "name" field exists
                 if "name" in geometry:
                     node_by_name[geometry["name"]] = g
@@ -267,6 +271,85 @@ def load_geometry(geometry, material_by_name, M_parent: tm.mat4 ):
                           blob0_pos, blob0_radius,
                           blob1_pos, blob1_radius,
                           blob2_pos, blob2_radius)
+    elif g_type == "bezier":
+        # Bicubic Bezier surface patch tessellated into triangles (converted to a Mesh)
+        control_points = geometry.get("controlPoints", None)
+        if control_points is None or len(control_points) != 4 or any(len(row) != 4 for row in control_points):
+            print("Bezier patch must have 4x4 'controlPoints'; skipping initialization")
+            geom_id -= 1
+            return None
+
+        # Tessellation resolution (number of segments along each param axis)
+        steps_u = geometry.get("tessellation_u", geometry.get("tessellation", 10))
+        steps_v = geometry.get("tessellation_v", geometry.get("tessellation", 10))
+        steps_u = max(1, int(steps_u))
+        steps_v = max(1, int(steps_v))
+
+        # Evaluate Bezier patch in Python using cubic Bernstein basis
+        def bernstein3(t: float):
+            it = 1.0 - t
+            b0 = it * it * it
+            b1 = 3.0 * t * it * it
+            b2 = 3.0 * t * t * it
+            b3 = t * t * t
+            return [b0, b1, b2, b3]
+
+        verts_local = []
+        for iu in range(steps_u + 1):
+            u = float(iu) / float(steps_u)
+            bu = bernstein3(u)
+            for iv in range(steps_v + 1):
+                v = float(iv) / float(steps_v)
+                bv = bernstein3(v)
+                px = 0.0
+                py = 0.0
+                pz = 0.0
+                for i in range(4):
+                    for j in range(4):
+                        w = bu[i] * bv[j]
+                        cp = control_points[i][j]
+                        px += w * cp[0]
+                        py += w * cp[1]
+                        pz += w * cp[2]
+                verts_local.append(np.array((px, py, pz), dtype=np.float32))
+
+        # Build triangle faces over the (steps_u+1) x (steps_v+1) grid
+        faces_local = []
+        verts_per_row = steps_v + 1
+        for iu in range(steps_u):
+            for iv in range(steps_v):
+                i0 = iu * verts_per_row + iv
+                i1 = (iu + 1) * verts_per_row + iv
+                i2 = (iu + 1) * verts_per_row + (iv + 1)
+                i3 = iu * verts_per_row + (iv + 1)
+                # Two triangles per quad
+                faces_local.append((i0, i1, i2))
+                faces_local.append((i0, i2, i3))
+
+        # Append to global mesh vertex/face arrays
+        n_verts = len(verts_local)
+        n_faces = len(faces_local)
+
+        scene_meshes_verts = np.resize(scene_meshes_verts, (meshes_total_nb_verts + n_verts, 3))
+        scene_meshes_faces = np.resize(scene_meshes_faces, (meshes_total_nb_faces + n_faces, 3))
+
+        for i in range(n_verts):
+            scene_meshes_verts[meshes_total_nb_verts + i] = verts_local[i]
+
+        for i in range(n_faces):
+            f = faces_local[i]
+            scene_meshes_faces[meshes_total_nb_faces + i] = np.array(
+                (f[0] + meshes_total_nb_verts,
+                 f[1] + meshes_total_nb_verts,
+                 f[2] + meshes_total_nb_verts),
+                dtype=np.int32
+            )
+
+        M, M_inv = load_geometry_transformation_matrix(geometry, M_parent)
+        mesh = geom.Mesh(geom_id, g_materials[0], meshes_total_nb_faces, n_faces, M, M_inv)
+        meshes_total_nb_verts += n_verts
+        meshes_total_nb_faces += n_faces
+        return mesh
     else:
         print("Unkown object type", g_type, ", skipping initialization")
         geom_id -= 1  # we cancel the increment of geom_id since we didn't create any geometry
