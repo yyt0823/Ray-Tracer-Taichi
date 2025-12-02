@@ -54,7 +54,10 @@ if __name__ == "__main__":
                     full_scene.render(iteration)
                     print(f"Completed {iteration-1} / {num_samples} samples per pixel")
                     iteration += 1
-                gui.set_image( full_scene.image )
+                # Crop image to actual resolution before displaying
+                img = full_scene.image.to_numpy()
+                img_cropped = img[:full_scene.camera.width, :full_scene.camera.height]
+                gui.set_image(img_cropped)
                 gui.show()
             save_image( full_scene.image, scene_file_name, args.outdir, full_scene.camera.width, full_scene.camera.height )
         else:

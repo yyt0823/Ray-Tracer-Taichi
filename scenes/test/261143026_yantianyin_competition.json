@@ -1,5 +1,5 @@
 {
-  "resolution": [1280, 720],
+  "resolution": [1280,720],
   "AA_jitter": true,
   "AA_samples": 32,
   "ambient": [0.1, 0.1, 0.1],
@@ -7,20 +7,24 @@
     "position": [0.0, 3.0, 10.0],
     "lookAt": [0.0, 1.5, 0.0],
     "up": [0.0, 1.0, 0.0],
-    "fovy": 45.0
-  },
-  "environment": {
-    "enabled": true,
-    "image": "textures/cathedral.png"
+    "fovy": 75
   },
   "materials": [
     {
       "name": "glass_teapot",
-      "diffuse": [0.1, 0.1, 0.1],
-      "specular": [0.8, 0.8, 0.8],
-      "shininess": 100,
-      "refraction": 1,
+      "diffuse": [0.2, 0.4, 0.9],
+        "specular": [0.5, 0.5, 0.5],
+        "shininess": 32,
+      "refraction": 0,
       "ior": 1.5
+    },
+    {
+        "name": "glass_cup",
+        "diffuse": [0.1, 0.1, 0.1],
+        "specular": [0.8, 0.8, 0.8],
+        "shininess": 100,
+        "refraction": 1,
+        "ior": 1.5
     },
     {
       "name": "mirror",
@@ -53,78 +57,115 @@
       "specular": [0.8, 0.8, 0.8],
       "shininess": 32
     },
+    
     {
       "name": "black",
       "diffuse": [0.0, 0.0, 0.0],
       "specular": [0.0, 0.0, 0.0],
       "shininess": 0
     },
+
     {
-      "name": "white",
-      "diffuse": [1.0, 1.0, 1.0],
-      "specular": [0.0, 0.0, 0.0],
-      "shininess": 0
+        "name": "white",
+        "diffuse": [1.0, 1.0, 1.0],
+        "specular": [0.0, 0.0, 0.0],
+        "shininess": 0
+      },
+
+    {
+        "name": "red",
+        "diffuse": [0.8, 0.0, 0.0],
+        "specular": [0.3, 0.3, 0.3],
+        "shininess": 32
+    },
+    {
+        "name": "pink",
+        "diffuse": [1.0, 0.6, 0.75],
+        "specular": [0.4, 0.4, 0.4],
+        "shininess": 32
     }
   ],
   "objects": [
+    
     {
       "name": "checkerboard_plane",
       "type": "plane",
       "normal": [0.0, 1.0, 0.0],
       "position": [0.0, 0.0, 0.0],
-      "materials": ["black", "white"]
+      "materials": ["white","pink"]
     },
+    
+    {
+        "name": "backplane",
+        "type": "plane",
+        "normal": [0.0, 1.0, 0.0],
+        "position": [-2, 0.0, -8.0],
+        "rotation": [90, 0, 120],
+        "materials": ["mirror"]
+    },
+
     {
       "name": "cone",
       "type": "cone",
-      "radius": 0.8,
-      "height": 2.0,
-      "position": [-4.0, 1.0, -2.0],
+      "radius": 1,
+      "height": 4.5,
+      "position": [4.0, 0, -2.0],
       "materials": ["cone_material"],
       "rotation": [0, 0, 0]
     },
     {
       "name": "metaball",
       "type": "metaball",
-      "threshold": 1.0,
-      "position": [4.0, 1.5, -2.0],
+      "threshold": 0.8,
+      "position": [4.0, 5, -2.0],
       "materials": ["metaball_material"],
+      "scale": [0.5, 0.5, 0.5],
       "blobs": [
         {
-          "position": [-0.5, 0.0, 0.0],
-          "radius": 1.0
+          "position": [-1.5, 0.0, 0.0],
+          "radius": 1
         },
         {
-          "position": [0.5, 0.0, 0.0],
-          "radius": 1.0
+          "position": [0, 2, 0.0],
+          "radius": 1
         },
         {
-          "position": [0.0, 0.8, 0.0],
-          "radius": 0.8
+          "position": [1.5, 0.0, 0.0],
+          "radius": 1.3
         }
       ]
     },
+
+      {
+        "name": "box",
+        "type": "box",
+        "position": [-3, -0.8, 3.5],
+        "materials": ["white"],
+        "scale": [1.5, 1, 1]
+      },
     {
       "name": "mirror_sphere",
       "type": "sphere",
-      "radius": 0.8,
-      "position": [-2.5, 0.8, 2.0],
+      "radius": 0.7,
+      "position": [-2,0.5, 2.0],
       "materials": ["mirror"]
     },
     {
       "name": "motion_sphere",
       "type": "sphere",
-      "radius": 0.7,
-      "position": [2.5, 0.7, 2.0],
+      "radius": 0.3,
+      "position": [4, 4, 2.0],
       "materials": ["motion_sphere"],
-      "motion_dir": [0.5, 0.0, 0.0]
+      "motion_dir": [0.5, -0.5, 0.0]
     },
     {
-      "name": "env_sphere",
-      "type": "sphere",
-      "radius": 0.7,
-      "position": [0.0, 0.7, 2.0],
-      "materials": ["env_sphere"]
+        "name": "glass_cup",
+        "type": "mesh",
+        "filepath": "./meshes/torus.obj",
+        "position": [1.2, 3, 8.1],
+        "rotation": [60.0, 0, -30],
+        "scale": [0.1, 0.5, 0.1],
+        "materials": ["glass_cup"]
     },
     {
       "name": "glass_teapot_body_1",
@@ -492,21 +533,12 @@
     }
   ],
   "lights": [
-    {
-      "name": "point_light",
-      "type": "point",
-      "position": [5.0, 6.0, 5.0],
-      "colour": [1.0, 1.0, 1.0],
-      "power": 1.0,
-      "attenuation": [0.0, 0.0, 1.0]
-    },
-    {
-      "name": "directional_light",
-      "type": "directional",
-      "direction": [-0.5, -1.0, -0.3],
-      "colour": [0.8, 0.8, 0.9],
-      "power": 0.6
-    }
+    { "name": "light1", "type": "point", "position": [10.0, 10.0, 10.0], "colour": [0.8, 0.8, 0.8], "power": 2 },
+    { "name": "light2", "type": "point", "position": [0.0, 2.0, 0.0], "colour": [0.8, 0.6, 0.6], "power": 5 },
+    { "name": "light3", "type": "point", "position": [-1, 2.0, -5.0], "colour": [0.8, 0.6, 0.6], "power": 1 }
   ]
+
+
+    
 }
 

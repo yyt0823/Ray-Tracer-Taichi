@@ -79,7 +79,9 @@ def load_scene(infile: str, image_scale_factor: float = 1.0) -> scene.Scene:
             l_attenuation = tm.vec3(0,0,1) if "attenuation" not in light else tm.vec3( light["attenuation"] )
             l_type = 1
         elif l_type == "directional":
-            l_vector = tm.normalize(tm.vec3(light["direction"]))
+            direction = np.array(light["direction"], dtype=np.float32)
+            direction_normalized = direction / np.linalg.norm(direction)
+            l_vector = tm.vec3(direction_normalized)
             l_attenuation = tm.vec3(0,0,0)
             l_type = 0
             if "attenuation" in light:

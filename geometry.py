@@ -815,6 +815,8 @@ def compute_sdf_normal(metaball: Metaball, point: tm.vec3) -> tm.vec3:
     result = tm.vec3(0.0, 0.0, 1.0)  # Default normal if gradient is zero
     if grad_len > EPSILON:
         result = tm.normalize(gradient)
+        if sdf_center > 0:
+            result = -result
     return result
 
 @ti.func
@@ -877,6 +879,8 @@ def rayMarchMetaball(metaball: Metaball, ray: Ray, t_min: float, t_max: float) -
         # Compute normal at intersection point
         N_local = compute_sdf_normal(metaball, P_local)
         
+        if tm.dot(N_local, D_local) > 0:
+            N_local = -N_local
         # Transform back to world space
         P_world_h = metaball.M @ tm.vec4(P_local, 1.0)
         hit.position = P_world_h.xyz

@@ -1,0 +1,8 @@
+My scene depicts an afternoon tea time setting with several objects demonstrating different ray tracing features:
+
+- A book positioned in the bottom-left corner, rendered as an axis-aligned bounding box (AABox)
+- An ice crystal ball located between the teapot and the book, featuring refraction effects
+- A teapot in the center, defined using Bezier control points that are tessellated into a mesh for rendering
+- An ice cream cone, created by combining a cone quadric with a metaball for the scoop
+- A glass cup that appears to be flying through the air, having been struck by a small ball with motion blur
+- A mirror positioned in the background, showcasing reflection effects

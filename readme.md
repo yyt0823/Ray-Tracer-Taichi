@@ -1,3 +1,8 @@
+"""
+yantian yin
+261143026
+"""
+
 Objective 9
 
 1 point 
@@ -61,4 +66,14 @@ Objective 9
     python main.py -i scenes/Sphere_env.json -s
 -- or 
     open "out/Sphere_env.png" 
+
+2 point
+-- Taichi kernel cache
+-- Use fixed field sizes for all Taichi fields
+-- Store actual counts/parameters in separate fields instead of using variable field sizes
+-- you can test with different scenes and notice faster subsequent renders due to kernel caching:
+    python main.py -i scenes/test/Cone.json -s
+    python main.py -i scenes/test/Cone2.json -s
+or check the kernal with will be the same across different scenes
+    [D 12/01/25 16:25:49.516 5555475] [kernel_compilation_manager.cpp:try_load_cached_kernel@224] Create kernel 'render_c80_0' from cache (key='T5c986ab6c6c3e2bbfce845c28799b48ed2f2340d2c5c5aa09b378da9004294c3')
 
