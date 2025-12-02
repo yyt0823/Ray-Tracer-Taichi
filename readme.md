@@ -1,6 +1,17 @@
 """
 yantian yin
 261143026
+competition enroll: 
+json scene
+-- scenes/test/261143026_yantianyin_competition.json
+run with : python main.py -i scenes/test/261143026_yantianyin_competition.json -s
+png
+-- out/261143026_yantianyin_competition.png
+run with : open out/261143026_yantianyin_competition.png
+
+txt:
+-- 261143026_yantianyin_competition.txt
+run with : open 261143026_yantianyin_competition.txt
 """
 
 Objective 9
