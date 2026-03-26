@@ -59,15 +59,63 @@ python main.py -i scenes/Sphere_env.json -s
 
 ## Sample Outputs
 
-| Scene | Output |
-|-------|--------|
-| Teapot (Bezier patches) | `out/Teapot.png` |
-| Metaballs | `out/Metaball.png` |
-| Mirror reflection | `out/MirrorBall.png` |
-| Glass sphere (refraction) | `out/GlassSphere.png` |
-| Motion blur | `out/Sphere_motion.png` |
-| Environment map | `out/Sphere_env.png` |
-| Competition entry | `out/261143026_yantianyin_competition.png` |
+**Competition Entry**
+
+![Competition](out/261143026_yantianyin_competition.png)
+
+---
+
+**Teapot** (Bezier surface patches)
+
+![Teapot](out/Teapot.png)
+
+**Metaballs** (ray marched implicits)
+
+![Metaball](out/Metaball.png)
+
+**Mirror Reflection**
+
+![MirrorBall](out/MirrorBall.png)
+
+**Glass Sphere** (refraction)
+
+![GlassSphere](out/GlassSphere.png)
+
+**Motion Blur**
+
+![Sphere motion](out/Sphere_motion.png)
+
+**Spherical Environment Map**
+
+![Sphere env](out/Sphere_env.png)
+
+**Cone** (quadric geometry)
+
+![Cone](out/Cone.png)
+
+**Bunny Mesh** (with AABB acceleration)
+
+![BunnyMesh](out/BunnyMesh.png)
+
+**Torus Mesh**
+
+![TorusMesh](out/TorusMesh.png)
+
+**3HHB Protein**
+
+![3HHB](out/3HHB.png)
+
+**Box RGB Lights**
+
+![BoxRGBLights](out/BoxRGBLights.png)
+
+**Ellipse**
+
+![Ellipse](out/Ellipse.png)
+
+**Two Spheres + Plane**
+
+![TwoSpheresPlane](out/TwoSpheresPlane.png)
 
 ---
 
