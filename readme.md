@@ -1,6 +1,4 @@
-# Ray Tracer — COMP557 A4
-
-**Yantian Yin — 261143026**
+# Ray Tracer — Taichi
 
 A Python ray tracer built with [Taichi](https://www.taichi-lang.org/) supporting advanced geometry, optical effects, and acceleration structures. Scored **9.5 / 10** on Objective 9 + competition entry.
 
